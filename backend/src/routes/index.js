@@ -1,0 +1,31 @@
+const express = require("express");
+const router = express.Router();
+
+const authRoutes = require("./auth.routes");
+const alertRoutes = require("./alert.routes");
+const cameraRoutes = require("./camera.routes");
+const dashboardRoutes = require("./dashboard.routes");
+const peopleCountRoutes = require("./peopleCount.routes");
+const reportRoutes = require("./report.routes");
+const uploadRoutes = require("./upload.routes");
+const zoneRoutes = require("./zone.routes");
+const branchRoutes = require("./branch.routes");
+const tenantRoutes = require("./tenant.routes");
+const uploadAnalysisRoutes = require("./uploadAnalysisRoutes");
+const alertThresholdRoutes = require("./alertThreshold.routes");
+
+console.log("Main routes loaded");
+router.use("/auth", authRoutes);
+router.use("/alerts", alertRoutes);
+router.use("/cameras", cameraRoutes);
+router.use("/dashboard", dashboardRoutes);
+router.use("/people-count", peopleCountRoutes);
+router.use("/reports", reportRoutes);
+router.use("/upload", uploadRoutes);
+router.use("/zones", zoneRoutes);
+router.use("/branches", branchRoutes);
+router.use("/tenants", tenantRoutes);   
+router.use("/upload-analysis", uploadAnalysisRoutes);
+router.use("/alert-thresholds", alertThresholdRoutes);
+
+module.exports = router;

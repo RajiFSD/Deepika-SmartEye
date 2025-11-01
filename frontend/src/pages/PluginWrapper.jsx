@@ -1,0 +1,171 @@
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { LayoutDashboard, Settings, Upload, AlertCircle, FileText, 
+  LogOut, Users, Menu, X, Camera, Building2, UserSquare2, Flame, Bell, Activity } from 'lucide-react';
+import { useState } from 'react';
+
+function PluginWrapper({ setIsAuthenticated }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+    setIsAuthenticated(false);
+    navigate('/login');
+  };
+
+  const menuSections = [
+    {
+      title: 'Main',
+      items: [
+        { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/branches', icon: Building2, label: 'Branches' },
+        { path: '/tenants', icon: UserSquare2, label: 'Tenants' },
+        { path: '/cameras', icon: Camera, label: 'Cameras' },
+      ]
+    },
+    {
+      title: 'People Counting',
+      items: [
+        { path: '/zone-config', icon: Settings, label: 'Zone Configuration' },
+        { path: '/violations', icon: Users, label: 'Detection Logs' },
+        { path: '/upload', icon: Upload, label: 'Upload & Analyze' },
+        { path: '/alerts', icon: AlertCircle, label: 'Alert Settings' },
+      ]
+    },
+    {
+      title: 'Smoke Alert',
+      items: [
+        { path: '/smoke-detection', icon: Flame, label: 'Smoke Detection' },
+        { path: '/smoke-alerts', icon: Bell, label: 'Alert History' },
+        { path: '/smoke-analytics', icon: Activity, label: 'Analytics' },
+      ]
+    },
+    {
+      title: 'System',
+      items: [
+        { path: '/reports', icon: FileText, label: 'Reports' },
+      ]
+    }
+  ];
+
+  const isActive = (path) => location.pathname === path;
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <aside className={`fixed left-0 top-0 h-screen bg-white border-r border-gray-200 shadow-lg z-40 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-0 -translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+          {/* Logo */}
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                <Users className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-gray-900">SmartEye AI</h1>
+                <p className="text-xs text-gray-500">Security Platform</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 px-4 py-4 overflow-y-auto">
+            {menuSections.map((section, sectionIndex) => (
+              <div key={sectionIndex} className="mb-6">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 mb-2">
+                  {section.title}
+                </h3>
+                <div className="space-y-1">
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.path}
+                        onClick={() => navigate(item.path)}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+                          isActive(item.path)
+                            ? 'bg-blue-100 text-blue-700 border-r-4 border-blue-600'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        <Icon className="w-5 h-5" />
+                        <span className="font-medium text-sm">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+
+          {/* User Profile & Logout */}
+          <div className="px-4 py-4 border-t border-gray-200">
+            <div className="flex items-center gap-3 px-4 py-2 mb-2">
+              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                <span className="text-white text-sm font-bold">
+                  {user.name?.charAt(0) || 'A'}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{user.name}</p>
+                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="font-medium">Logout</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}>
+        {/* Top Bar */}
+        <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-30">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+            
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-sm font-medium text-gray-900">
+                  {new Date().toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {new Date().toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })}
+                </p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="p-6">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
+
+export default PluginWrapper;

@@ -1,0 +1,217 @@
+# Contributing to SmartEye AI
+
+First off, thank you for considering contributing to SmartEye AI! 🎉
+
+## Code of Conduct
+
+This project and everyone participating in it is governed by our Code of Conduct. By participating, you are expected to uphold this code.
+
+## How Can I Contribute?
+
+### 🐛 Reporting Bugs
+
+Before creating bug reports, please check existing issues. When you create a bug report, include as many details as possible:
+
+- **Use a clear and descriptive title**
+- **Describe the exact steps to reproduce the problem**
+- **Provide specific examples**
+- **Describe the behavior you observed**
+- **Explain which behavior you expected**
+- **Include screenshots if possible**
+- **Include your environment details** (OS, Node version, etc.)
+
+### 💡 Suggesting Enhancements
+
+Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion, include:
+
+- **Use a clear and descriptive title**
+- **Provide a detailed description of the suggested enhancement**
+- **Explain why this enhancement would be useful**
+- **List some examples of how it would be used**
+
+### 📝 Pull Requests
+
+1. **Fork the repository**
+2. **Create a branch** from `develop`
+   ```bash
+   git checkout -b feature/amazing-feature
+   ```
+3. **Make your changes**
+4. **Follow the code style** (use ESLint)
+5. **Write/update tests** if applicable
+6. **Update documentation** if needed
+7. **Commit your changes**
+   ```bash
+   git commit -m 'Add some amazing feature'
+   ```
+8. **Push to your branch**
+   ```bash
+   git push origin feature/amazing-feature
+   ```
+9. **Open a Pull Request**
+
+## Development Setup
+
+### Prerequisites
+
+- Node.js >= 16.0.0
+- MySQL >= 8.0
+- npm >= 8.0.0
+
+### Setup Steps
+
+```bash
+# Clone your fork
+git clone https://github.com/your-username/smarteye-ai.git
+cd smarteye-ai/backend
+
+# Install dependencies
+npm install
+
+# Setup environment
+cp .env.example .env
+# Edit .env with your configuration
+
+# Initialize database
+npm run db:sync
+npm run db:seed
+
+# Start development server
+npm run dev
+```
+
+## Coding Standards
+
+### JavaScript Style Guide
+
+We use ESLint for code linting. Key points:
+
+- Use **2 spaces** for indentation
+- Use **single quotes** for strings
+- Add **semicolons** at the end of statements
+- Use **camelCase** for variables and functions
+- Use **PascalCase** for classes
+- Add **JSDoc comments** for functions
+- Keep lines under **100 characters**
+
+Example:
+
+```javascript
+/**
+ * Create a new camera
+ * @param {Object} cameraData - Camera configuration
+ * @returns {Promise<Object>} Created camera object
+ */
+async function createCamera(cameraData) {
+  try {
+    const camera = await Camera.create(cameraData);
+    return camera;
+  } catch (error) {
+    logger.error('Failed to create camera:', error);
+    throw error;
+  }
+}
+```
+
+### Commit Messages
+
+Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+Types:
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, etc.)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+
+Examples:
+```
+feat(camera): add support for ONVIF cameras
+
+fix(auth): resolve token refresh issue
+
+docs(readme): update installation instructions
+```
+
+### Branch Naming
+
+- `feature/` - New features
+- `fix/` - Bug fixes
+- `docs/` - Documentation updates
+- `refactor/` - Code refactoring
+- `test/` - Test updates
+
+Examples:
+- `feature/add-facial-recognition`
+- `fix/camera-stream-crash`
+- `docs/update-api-docs`
+
+## Project Structure
+
+```
+src/
+├── config/       # Configuration files
+├── controllers/  # Route controllers
+├── models/       # Database models
+├── routes/       # API routes
+├── services/     # Business logic
+├── middleware/   # Express middleware
+├── validators/   # Request validation
+├── utils/        # Utility functions
+└── server.js     # Application entry point
+```
+
+### Adding a New Feature
+
+1. **Model** - Define database schema in `src/models/`
+2. **Validator** - Add validation in `src/validators/`
+3. **Service** - Implement business logic in `src/services/`
+4. **Controller** - Create route handler in `src/controllers/`
+5. **Routes** - Define API endpoints in `src/routes/`
+6. **Tests** - Add tests if applicable
+
+## Testing
+
+```bash
+# Run tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Run specific test file
+npm test -- cameraService.test.js
+```
+
+## Documentation
+
+- Update README.md for user-facing changes
+- Add JSDoc comments for new functions
+- Update API documentation for new endpoints
+- Add inline comments for complex logic
+
+## Questions?
+
+Feel free to ask questions by:
+- Opening an issue
+- Contacting maintainers
+- Joining our community chat
+
+## Recognition
+
+Contributors will be recognized in:
+- README.md contributors section
+- Release notes
+- Project documentation
+
+Thank you for contributing! 🚀
