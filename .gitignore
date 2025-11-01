@@ -1,0 +1,153 @@
+# =====================================
+# 🌐 FRONTEND (React / Web)
+# =====================================
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build & Cache
+build/
+dist/
+out/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+.eslintcache
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# =====================================
+# 🧠 BACKEND / AI MODULE (Python)
+# =====================================
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+*/venv/
+
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Packaging
+*.egg-info/
+.eggs/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+sdist/
+wheels/
+*.egg
+.installed.cfg
+
+# =====================================
+# 🎥 MEDIA / LARGE FILES
+# =====================================
+uploads/
+temp/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.zip
+*.tar
+*.gz
+*.rar
+
+# Allow images in public folder
+!public/**/*.jpg
+!public/**/*.png
+!public/**/*.gif
+!public/**/*.svg
+
+# AI Models (large)
+models/*.pth
+models/*.pt
+models/*.h5
+models/*.onnx
+*.weights
+*.ckpt
+*.pb
+*.tflite
+
+# =====================================
+# 💾 DATABASES / EXPORTS
+# =====================================
+*.sql
+*.sqlite
+*.db
+*.dump
+backups/
+*.backup
+
+# =====================================
+# ⚙️ PROJECT / SYSTEM FILES
+# =====================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+
+# =====================================
+# 📄 DOCUMENTS / REPORTS
+# =====================================
+docs/_build/
+reports/*.pdf
+reports/*.xlsx
+
+# =====================================
+# 🧩 DOCKER / CERTS
+# =====================================
+.dockerignore
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+
+# =====================================
+# 🚫 PROJECT-SPECIFIC IGNORE
+# =====================================
+ai-module/__pycache__/
+ai-module/venv/
+ai-module/logs/
+ai-module/temp/
+ai-module/output/
+ai-module/checkpoints/
+ai-module/uploads/
+ai-module/models/
+ai-module/data/
