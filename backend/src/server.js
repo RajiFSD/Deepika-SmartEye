@@ -31,6 +31,8 @@ const branchRoutes = require('./routes/branch.routes');
 const tenantRoutes = require('./routes/tenant.routes');
 const uploadAnalysisRoutes = require('./routes/uploadAnalysisRoutes');
 const alertThresholdRoutes = require('./routes/alertThreshold.routes');
+const adminRoutes = require('./routes/adminRoutes');
+const cameraStreamRoutes = require('./routes/cameraStreamRoutes');
 
 class Server {
   constructor() {
@@ -149,6 +151,8 @@ class Server {
     this.app.use('/api/tenants', tenantRoutes);
     this.app.use('/api/upload-analysis', uploadAnalysisRoutes);
     this.app.use('/api/alert-thresholds', alertThresholdRoutes);
+    this.app.use('/api/admin', adminRoutes);  
+    this.app.use('/api/camera', cameraStreamRoutes);
     
     // Health check
     this.app.get('/api/health', (req, res) => {

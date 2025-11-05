@@ -68,18 +68,45 @@ class PeopleCountController {
 
   async getHourlyAnalytics(req, res) {
     try {
-      const { date, camera_id, branch_id } = req.query;
-      const analytics = await peopleCountService.getHourlyAnalytics({ date, camera_id, branch_id });
+      const { date, camera_id, branch_id, tenant_id } = req.query;
+      
+      console.log('🔍 ============ HOURLY ANALYTICS DEBUG ============');
+      console.log('📊 Request Query:', req.query);
+      console.log('📊 Extracted params:', { date, camera_id, branch_id, tenant_id });
+
+      const analytics = await peopleCountService.getHourlyAnalytics({ 
+        date, 
+        camera_id, 
+        branch_id,
+        tenant_id
+      });
+
+      console.log('✅ Analytics result length:', analytics?.length);
+      console.log('✅ First 3 hours:', JSON.stringify(analytics?.slice(0, 3), null, 2));
+      const totalEntries = analytics?.reduce((sum, h) => sum + (h.entries || 0), 0) || 0;
+      const totalExits = analytics?.reduce((sum, h) => sum + (h.exits || 0), 0) || 0;
+      console.log('📊 Total entries:', totalEntries);
+      console.log('📊 Total exits:', totalExits);
+      console.log('🔍 ============ END DEBUG ============');
+
       return ResponseHandler.success(res, analytics);
     } catch (error) {
+      console.error('❌ HOURLY ANALYTICS ERROR:', error.message);
+      console.error('❌ Stack:', error.stack);
       return ResponseHandler.internalServerError(res, error.message);
     }
   }
 
   async getDailyAnalytics(req, res) {
     try {
-      const { start_date, end_date, camera_id, branch_id } = req.query;
-      const analytics = await peopleCountService.getDailyAnalytics({ start_date, end_date, camera_id, branch_id });
+      const { start_date, end_date, camera_id, branch_id, tenant_id } = req.query;
+      const analytics = await peopleCountService.getDailyAnalytics({ 
+        start_date, 
+        end_date, 
+        camera_id, 
+        branch_id,
+        tenant_id
+      });
       return ResponseHandler.success(res, analytics);
     } catch (error) {
       return ResponseHandler.internalServerError(res, error.message);

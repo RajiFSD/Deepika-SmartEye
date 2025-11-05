@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LogIn } from 'lucide-react';
+import { Eye, EyeOff, LogIn, Shield } from 'lucide-react';
 import authService from '../services/authService';
 
 function LoginPage({ setIsAuthenticated }) {
@@ -29,7 +29,7 @@ function LoginPage({ setIsAuthenticated }) {
     try {
       // Call backend API
       console.log('Submitting login for:', formData.email);      
-      console.log('passsword:', formData.password); // Mask password in logs
+      console.log('password:', formData.password); // Mask password in logs
       const response = await authService.login(formData.email, formData.password);
       console.log('Login successful:', response);
       // Set authentication state
@@ -45,7 +45,16 @@ function LoginPage({ setIsAuthenticated }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 relative">
+      {/* Admin Login Button - Top Right */}
+      <button
+        onClick={() => navigate('/admin/login')}
+        className="absolute top-6 right-6 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 shadow-md"
+      >
+        <Shield className="w-5 h-5" />
+        Admin Login
+      </button>
+
       <div className="max-w-md w-full mx-4">
         {/* Logo and Title */}
         <div className="text-center mb-8">

@@ -83,6 +83,7 @@ const authService = {
   // Get current user
   getCurrentUser: () => {
     const userStr = localStorage.getItem('user');
+    console.log('Current user string from localStorage:', userStr);
     return userStr ? JSON.parse(userStr) : null;
   },
 

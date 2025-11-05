@@ -4,12 +4,12 @@ const peopleCountService = {
   // Get all people count logs with pagination and filters
   getPeopleCountLogs: async (params = {}) => {
     try {
-      console.log('🔵 Fetching people count logs with params:', params);
+      console.log('ðŸ”µ Fetching people count logs with params:', params);
       const response = await api.get('/people-count', { params });
-      console.log('✅ People count logs fetched:', response.data);
+      console.log('âœ… People count logs fetched:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Error fetching people count logs:', error);
+      console.error('âŒ Error fetching people count logs:', error);
       throw error.response?.data?.message || 'Failed to fetch people count logs';
     }
   },
@@ -17,12 +17,12 @@ const peopleCountService = {
   // Get people count log by ID
   getPeopleCountLogById: async (id) => {
     try {
-      console.log('🔵 Fetching people count log:', id);
+      console.log('ðŸ”µ Fetching people count log:', id);
       const response = await api.get(`/people-count/${id}`);
-      console.log('✅ People count log fetched:', response.data);
+      console.log('âœ… People count log fetched:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Error fetching people count log:', error);
+      console.error('âŒ Error fetching people count log:', error);
       throw error.response?.data?.message || 'Failed to fetch people count log';
     }
   },
@@ -30,12 +30,12 @@ const peopleCountService = {
   // Create new people count log
   createPeopleCountLog: async (logData) => {
     try {
-      console.log('🔵 Creating people count log:', logData);
+      console.log('ðŸ”µ Creating people count log:', logData);
       const response = await api.post('/people-count', logData);
-      console.log('✅ People count log created:', response.data);
+      console.log('âœ… People count log created:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Error creating people count log:', error);
+      console.error('âŒ Error creating people count log:', error);
       throw error.response?.data?.message || 'Failed to create people count log';
     }
   },
@@ -43,12 +43,12 @@ const peopleCountService = {
   // Get logs by camera
   getLogsByCamera: async (cameraId, params = {}) => {
     try {
-      console.log('🔵 Fetching logs for camera:', cameraId, params);
+      console.log('ðŸ”µ Fetching logs for camera:', cameraId, params);
       const response = await api.get(`/people-count/camera/${cameraId}`, { params });
-      console.log('✅ Camera logs fetched:', response.data);
+      console.log('âœ… Camera logs fetched:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Error fetching camera logs:', error);
+      console.error('âŒ Error fetching camera logs:', error);
       throw error.response?.data?.message || 'Failed to fetch camera logs';
     }
   },
@@ -56,12 +56,12 @@ const peopleCountService = {
   // Get logs by tenant
   getLogsByTenant: async (tenantId, params = {}) => {
     try {
-      console.log('🔵 Fetching logs for tenant:', tenantId, params);
+      console.log('ðŸ”µ Fetching logs for tenant:', tenantId, params);
       const response = await api.get(`/people-count/tenant/${tenantId}`, { params });
-      console.log('✅ Tenant logs fetched:', response.data);
+      console.log('âœ… Tenant logs fetched:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Error fetching tenant logs:', error);
+      console.error('âŒ Error fetching tenant logs:', error);
       throw error.response?.data?.message || 'Failed to fetch tenant logs';
     }
   },
@@ -69,12 +69,12 @@ const peopleCountService = {
   // Get logs by branch
   getLogsByBranch: async (branchId, params = {}) => {
     try {
-      console.log('🔵 Fetching logs for branch:', branchId, params);
+      console.log('ðŸ”µ Fetching logs for branch:', branchId, params);
       const response = await api.get(`/people-count/branch/${branchId}`, { params });
-      console.log('✅ Branch logs fetched:', response.data);
+      console.log('âœ… Branch logs fetched:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Error fetching branch logs:', error);
+      console.error('âŒ Error fetching branch logs:', error);
       throw error.response?.data?.message || 'Failed to fetch branch logs';
     }
   },
@@ -82,12 +82,12 @@ const peopleCountService = {
   // Get hourly analytics
   getHourlyAnalytics: async (params = {}) => {
     try {
-      console.log('🔵 Fetching hourly analytics:', params);
+      console.log('ðŸ”µ Fetching hourly analytics:', params);
       const response = await api.get('/people-count/analytics/hourly', { params });
-      console.log('✅ Hourly analytics fetched:', response.data);
+      console.log('âœ… Hourly analytics fetched:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Error fetching hourly analytics:', error);
+      console.error('âŒ Error fetching hourly analytics:', error);
       throw error.response?.data?.message || 'Failed to fetch hourly analytics';
     }
   },
@@ -95,12 +95,12 @@ const peopleCountService = {
   // Get daily analytics
   getDailyAnalytics: async (params = {}) => {
     try {
-      console.log('🔵 Fetching daily analytics:', params);
+      console.log('ðŸ”µ Fetching daily analytics:', params);
       const response = await api.get('/people-count/analytics/daily', { params });
-      console.log('✅ Daily analytics fetched:', response.data);
+      console.log('âœ… Daily analytics fetched:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Error fetching daily analytics:', error);
+      console.error('âŒ Error fetching daily analytics:', error);
       throw error.response?.data?.message || 'Failed to fetch daily analytics';
     }
   },
@@ -108,7 +108,7 @@ const peopleCountService = {
   // Export logs to CSV
   exportLogsToCSV: async (logs) => {
     try {
-      console.log('🔵 Exporting logs to CSV');
+      console.log('ðŸ”µ Exporting logs to CSV');
       
       // Create CSV header
       const headers = [
@@ -155,10 +155,10 @@ const peopleCountService = {
       link.click();
       document.body.removeChild(link);
       
-      console.log('✅ CSV exported successfully');
+      console.log('âœ… CSV exported successfully');
       return true;
     } catch (error) {
-      console.error('❌ Error exporting CSV:', error);
+      console.error('âŒ Error exporting CSV:', error);
       throw 'Failed to export CSV';
     }
   }

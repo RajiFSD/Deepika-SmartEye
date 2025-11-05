@@ -1,5 +1,6 @@
 const { PeopleCountLog, Camera, Tenant, Branch, ZoneConfig } = require("@models");
 const { Op } = require("sequelize");
+const { sequelize } = require("@config/database");
 
 class PeopleCountService {
   async createPeopleCountLog(data) {
@@ -144,8 +145,10 @@ class PeopleCountService {
     }
   }
 
-  async getHourlyAnalytics({ date, camera_id, branch_id } = {}) {
+  async getHourlyAnalytics({ date, camera_id, branch_id, tenant_id } = {}) {
     try {
+      console.log('🔧 SERVICE: getHourlyAnalytics called with:', { date, camera_id, branch_id, tenant_id });
+      
       const where = {};
       const targetDate = date ? new Date(date) : new Date();
       targetDate.setHours(0, 0, 0, 0);
@@ -159,27 +162,63 @@ class PeopleCountService {
 
       if (camera_id) where.camera_id = camera_id;
       if (branch_id) where.branch_id = branch_id;
+      if (tenant_id) where.tenant_id = tenant_id;
 
+      console.log('🔧 SERVICE: Date range:', {
+        start: targetDate.toISOString(),
+        end: nextDate.toISOString()
+      });
+      console.log('🔧 SERVICE: WHERE clause:', JSON.stringify(where, null, 2));
+
+      // First check if there are any logs
+      const totalCount = await PeopleCountLog.count({ where });
+      console.log('🔧 SERVICE: Total logs in range:', totalCount);
+
+      if (totalCount === 0) {
+        console.log('⚠️ SERVICE: No logs found, returning empty hourly data');
+        return this.processHourlyData([]);
+      }
+
+      // Get sample logs to verify data
+      const sampleLogs = await PeopleCountLog.findAll({
+        where,
+        limit: 3,
+        raw: true
+      });
+      console.log('🔧 SERVICE: Sample logs:', JSON.stringify(sampleLogs, null, 2));
+
+      console.log('🔧 SERVICE: Executing hourly aggregation query...');
+      
       const hourlyData = await PeopleCountLog.findAll({
         where,
         attributes: [
-          [this.sequelize.fn('HOUR', this.sequelize.col('detection_time')), 'hour'],
+          [sequelize.fn('HOUR', sequelize.col('detection_time')), 'hour'],
           'direction',
-          [this.sequelize.fn('COUNT', this.sequelize.col('log_id')), 'count']
+          [sequelize.fn('COUNT', sequelize.col('log_id')), 'count']
         ],
         group: ['hour', 'direction'],
-        order: [['hour', 'ASC']],
+        order: [[sequelize.literal('hour'), 'ASC']],
         raw: true
       });
 
-      return this.processHourlyData(hourlyData);
+      console.log('🔧 SERVICE: Raw hourly data from DB:', JSON.stringify(hourlyData, null, 2));
+      console.log('🔧 SERVICE: Hourly data length:', hourlyData.length);
+
+      const result = this.processHourlyData(hourlyData);
+      console.log('🔧 SERVICE: Processed result (first 5):', JSON.stringify(result.slice(0, 5), null, 2));
+      console.log('🔧 SERVICE: Total entries:', result.reduce((sum, h) => sum + h.entries, 0));
+      console.log('🔧 SERVICE: Total exits:', result.reduce((sum, h) => sum + h.exits, 0));
+
+      return result;
     } catch (error) {
-      console.error("Error fetching hourly analytics:", error);
+      console.error("❌ SERVICE ERROR: Error fetching hourly analytics:", error);
+      console.error("❌ SERVICE ERROR: Error message:", error.message);
+      console.error("❌ SERVICE ERROR: Error stack:", error.stack);
       throw new Error("Failed to retrieve hourly analytics");
     }
   }
 
-  async getDailyAnalytics({ start_date, end_date, camera_id, branch_id } = {}) {
+  async getDailyAnalytics({ start_date, end_date, camera_id, branch_id, tenant_id } = {}) {
     try {
       const where = {};
       
@@ -197,40 +236,51 @@ class PeopleCountService {
 
       if (camera_id) where.camera_id = camera_id;
       if (branch_id) where.branch_id = branch_id;
+      if (tenant_id) where.tenant_id = tenant_id;
 
       const dailyData = await PeopleCountLog.findAll({
         where,
         attributes: [
-          [this.sequelize.fn('DATE', this.sequelize.col('detection_time')), 'date'],
+          [sequelize.fn('DATE', sequelize.col('detection_time')), 'date'],
           'direction',
-          [this.sequelize.fn('COUNT', this.sequelize.col('log_id')), 'count']
+          [sequelize.fn('COUNT', sequelize.col('log_id')), 'count']
         ],
         group: ['date', 'direction'],
-        order: [['date', 'ASC']],
+        order: [[sequelize.literal('date'), 'ASC']],
         raw: true
       });
 
       return this.processDailyData(dailyData);
     } catch (error) {
       console.error("Error fetching daily analytics:", error);
+      console.error("Error details:", error.message);
       throw new Error("Failed to retrieve daily analytics");
     }
   }
 
   // Helper methods
   processHourlyData(hourlyData) {
+    console.log('🔧 PROCESS: Processing hourly data, input length:', hourlyData.length);
+    
     const result = Array.from({ length: 24 }, (_, hour) => ({
-      hour,
+      hour: `${hour.toString().padStart(2, '0')}:00`,
+      time: `${hour.toString().padStart(2, '0')}:00`,
       entries: 0,
       exits: 0
     }));
 
     hourlyData.forEach(item => {
+      console.log('🔧 PROCESS: Processing item:', JSON.stringify(item));
       const hour = parseInt(item.hour);
-      if (item.direction === 'IN') {
-        result[hour].entries = parseInt(item.count);
-      } else {
-        result[hour].exits = parseInt(item.count);
+      
+      if (hour >= 0 && hour < 24) {
+        if (item.direction === 'IN') {
+          result[hour].entries = parseInt(item.count);
+          console.log(`🔧 PROCESS: Set hour ${hour} entries to ${item.count}`);
+        } else if (item.direction === 'OUT') {
+          result[hour].exits = parseInt(item.count);
+          console.log(`🔧 PROCESS: Set hour ${hour} exits to ${item.count}`);
+        }
       }
     });
 
@@ -241,7 +291,10 @@ class PeopleCountService {
     const resultMap = new Map();
 
     dailyData.forEach(item => {
-      const date = item.date.toISOString().split('T')[0];
+      const date = item.date instanceof Date 
+        ? item.date.toISOString().split('T')[0] 
+        : item.date;
+        
       if (!resultMap.has(date)) {
         resultMap.set(date, { date, entries: 0, exits: 0 });
       }
@@ -249,7 +302,7 @@ class PeopleCountService {
       const dayData = resultMap.get(date);
       if (item.direction === 'IN') {
         dayData.entries = parseInt(item.count);
-      } else {
+      } else if (item.direction === 'OUT') {
         dayData.exits = parseInt(item.count);
       }
     });

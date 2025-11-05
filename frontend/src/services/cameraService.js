@@ -43,6 +43,7 @@ const cameraService = {
   getCameras: async (params = {}) => {
     try {
       console.log('🔵 Fetching cameras with params:', params);
+      console.log('API URL:', API_URL);
       const response = await apiClient.get('/cameras', { params });
       console.log('✅ Cameras fetched:', response.data);
       return response.data;

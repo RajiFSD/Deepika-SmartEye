@@ -13,6 +13,8 @@ const branchRoutes = require("./branch.routes");
 const tenantRoutes = require("./tenant.routes");
 const uploadAnalysisRoutes = require("./uploadAnalysisRoutes");
 const alertThresholdRoutes = require("./alertThreshold.routes");
+const adminRoutes = require("./adminRoutes");
+const cameraStreamRoutes = require("./cameraStreamRoutes");
 
 console.log("Main routes loaded");
 router.use("/auth", authRoutes);
@@ -27,5 +29,6 @@ router.use("/branches", branchRoutes);
 router.use("/tenants", tenantRoutes);   
 router.use("/upload-analysis", uploadAnalysisRoutes);
 router.use("/alert-thresholds", alertThresholdRoutes);
-
+router.use("/admin", adminRoutes);
+router.use("/camera", cameraStreamRoutes);
 module.exports = router;
