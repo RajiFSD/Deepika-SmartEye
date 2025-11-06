@@ -6,3 +6,10 @@
 "__pycache__/" 
 ".mypy_cache/" 
 ".pytest_cache/" 
+node_modules/
+# Python virtual environments
+venv/
+.ai-module/venv/
+__pycache__/
+*.pyc
+
