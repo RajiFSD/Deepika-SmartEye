@@ -9,9 +9,9 @@ const logger = require('@utils/logger');
 
 // Database configuration from environment variables
 const config = {
-  database: process.env.DB_NAME || 'smartai_people_counting',
+  database: process.env.DB_NAME || 'smarteye_ai',
   username: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
+  password: process.env.DB_PASSWORD || 'VconnectWinze@2025',
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 3306,
   dialect: 'mysql',

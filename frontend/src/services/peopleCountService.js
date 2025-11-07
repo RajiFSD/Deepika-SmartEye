@@ -4,9 +4,7 @@ const peopleCountService = {
   // Get all people count logs with pagination and filters
   getPeopleCountLogs: async (params = {}) => {
     try {
-      console.log('ðŸ”µ Fetching people count logs with params:', params);
       const response = await api.get('/people-count', { params });
-      console.log('âœ… People count logs fetched:', response.data);
       return response.data;
     } catch (error) {
       console.error('âŒ Error fetching people count logs:', error);
@@ -16,10 +14,8 @@ const peopleCountService = {
 
   // Get people count log by ID
   getPeopleCountLogById: async (id) => {
-    try {
-      console.log('ðŸ”µ Fetching people count log:', id);
+    try {    
       const response = await api.get(`/people-count/${id}`);
-      console.log('âœ… People count log fetched:', response.data);
       return response.data;
     } catch (error) {
       console.error('âŒ Error fetching people count log:', error);
@@ -29,10 +25,8 @@ const peopleCountService = {
 
   // Create new people count log
   createPeopleCountLog: async (logData) => {
-    try {
-      console.log('ðŸ”µ Creating people count log:', logData);
-      const response = await api.post('/people-count', logData);
-      console.log('âœ… People count log created:', response.data);
+    try {  
+      const response = await api.post('/people-count', logData); 
       return response.data;
     } catch (error) {
       console.error('âŒ Error creating people count log:', error);
@@ -42,10 +36,8 @@ const peopleCountService = {
 
   // Get logs by camera
   getLogsByCamera: async (cameraId, params = {}) => {
-    try {
-      console.log('ðŸ”µ Fetching logs for camera:', cameraId, params);
-      const response = await api.get(`/people-count/camera/${cameraId}`, { params });
-      console.log('âœ… Camera logs fetched:', response.data);
+    try {   
+      const response = await api.get(`/people-count/camera/${cameraId}`, { params });      
       return response.data;
     } catch (error) {
       console.error('âŒ Error fetching camera logs:', error);
@@ -55,10 +47,8 @@ const peopleCountService = {
 
   // Get logs by tenant
   getLogsByTenant: async (tenantId, params = {}) => {
-    try {
-      console.log('ðŸ”µ Fetching logs for tenant:', tenantId, params);
+    try {     
       const response = await api.get(`/people-count/tenant/${tenantId}`, { params });
-      console.log('âœ… Tenant logs fetched:', response.data);
       return response.data;
     } catch (error) {
       console.error('âŒ Error fetching tenant logs:', error);
@@ -68,10 +58,8 @@ const peopleCountService = {
 
   // Get logs by branch
   getLogsByBranch: async (branchId, params = {}) => {
-    try {
-      console.log('ðŸ”µ Fetching logs for branch:', branchId, params);
+    try {  
       const response = await api.get(`/people-count/branch/${branchId}`, { params });
-      console.log('âœ… Branch logs fetched:', response.data);
       return response.data;
     } catch (error) {
       console.error('âŒ Error fetching branch logs:', error);
@@ -81,10 +69,8 @@ const peopleCountService = {
 
   // Get hourly analytics
   getHourlyAnalytics: async (params = {}) => {
-    try {
-      console.log('ðŸ”µ Fetching hourly analytics:', params);
-      const response = await api.get('/people-count/analytics/hourly', { params });
-      console.log('âœ… Hourly analytics fetched:', response.data);
+    try {     
+      const response = await api.get('/people-count/analytics/hourly', { params });   
       return response.data;
     } catch (error) {
       console.error('âŒ Error fetching hourly analytics:', error);
@@ -95,10 +81,8 @@ const peopleCountService = {
   // Get daily analytics
   getDailyAnalytics: async (params = {}) => {
     try {
-      console.log('ðŸ”µ Fetching daily analytics:', params);
-      const response = await api.get('/people-count/analytics/daily', { params });
-      console.log('âœ… Daily analytics fetched:', response.data);
-      return response.data;
+       const response = await api.get('/people-count/analytics/daily', { params });
+       return response.data;
     } catch (error) {
       console.error('âŒ Error fetching daily analytics:', error);
       throw error.response?.data?.message || 'Failed to fetch daily analytics';

@@ -22,6 +22,7 @@ function AdminWrapper({ setIsAdminAuth }) {
     { path: '/admin/tenants', icon: UserSquare2, label: 'Tenants' },
     { path: '/admin/branches', icon: Building2, label: 'Branches' },
     { path: '/admin/cameras', icon: Camera, label: 'Cameras' },
+    { path: '/admin/payments', icon: Shield, label: 'Payment Plans' },
   ];
 
   const isActive = (path) => location.pathname === path;

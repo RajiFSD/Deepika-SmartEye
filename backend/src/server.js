@@ -215,7 +215,7 @@ class Server {
   }
 
   start() {
-    this.server = this.app.listen(this.port, () => {
+    this.server = this.app.listen(PORT,"0.0.0.0", () => {
       console.log(`
 🚀 SmartEye AI Server is running on port ${this.port}
 📊 Environment: ${process.env.NODE_ENV || 'development'}

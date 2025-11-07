@@ -81,11 +81,6 @@ function PeopleCountDashboard() {
         // Extract analytics
 const analyticsData = analyticsResponse?.data || [];
 
-console.log('ðŸ“Š Raw Analytics Data:', analyticsData);
-console.log('ðŸ“Š Is Array?', Array.isArray(analyticsData));
-console.log('ðŸ“Š Length:', analyticsData.length);
-console.log('ðŸ“Š First 3 items:', analyticsData.slice(0, 3));
-
 // Format analytics data
 const formattedChartData = Array.isArray(analyticsData) ? analyticsData.map(item => ({
   time: item.hour || item.time || '00:00',

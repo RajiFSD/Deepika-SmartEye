@@ -1,50 +1,13 @@
-import axios from 'axios';
-
-//const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-
-// Create axios instance with default config
-const apiClient = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add request interceptor to include auth token
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Add response interceptor to handle errors
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Redirect to login on unauthorized
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+// src/services/cameraService.js
+import api from './api';
 
 const cameraService = {
   // Get all cameras with pagination
   getCameras: async (params = {}) => {
     try {
       console.log('🔵 Fetching cameras with params:', params);
-      console.log('API URL:', API_URL);
-      const response = await apiClient.get('/cameras', { params });
+      console.log('API URL:', api.defaults.baseURL);
+      const response = await api.get('/cameras', { params });
       console.log('✅ Cameras fetched:', response.data);
       return response.data;
     } catch (error) {
@@ -57,7 +20,7 @@ const cameraService = {
   getCameraById: async (id) => {
     try {
       console.log('🔵 Fetching camera:', id);
-      const response = await apiClient.get(`/cameras/${id}`);
+      const response = await api.get(`/cameras/${id}`);
       console.log('✅ Camera fetched:', response.data);
       return response.data;
     } catch (error) {
@@ -70,7 +33,7 @@ const cameraService = {
   createCamera: async (cameraData) => {
     try {
       console.log('🔵 Creating camera:', cameraData);
-      const response = await apiClient.post('/cameras', cameraData);
+      const response = await api.post('/cameras', cameraData);
       console.log('✅ Camera created:', response.data);
       return response.data;
     } catch (error) {
@@ -84,7 +47,7 @@ const cameraService = {
   updateCamera: async (id, cameraData) => {
     try {
       console.log('🔵 Updating camera:', id, cameraData);
-      const response = await apiClient.put(`/cameras/${id}`, cameraData);
+      const response = await api.put(`/cameras/${id}`, cameraData);
       console.log('✅ Camera updated:', response.data);
       return response.data;
     } catch (error) {
@@ -97,7 +60,7 @@ const cameraService = {
   deleteCamera: async (id) => {
     try {
       console.log('🔵 Deleting camera:', id);
-      const response = await apiClient.delete(`/cameras/${id}`);
+      const response = await api.delete(`/cameras/${id}`);
       console.log('✅ Camera deleted:', response.data);
       return response.data;
     } catch (error) {
@@ -110,7 +73,7 @@ const cameraService = {
   updateCameraStatus: async (id, is_active) => {
     try {
       console.log('🔵 Updating camera status:', id, is_active);
-      const response = await apiClient.put(`/cameras/${id}/status`, { is_active });
+      const response = await api.put(`/cameras/${id}/status`, { is_active });
       console.log('✅ Camera status updated:', response.data);
       return response.data;
     } catch (error) {
@@ -123,7 +86,7 @@ const cameraService = {
   getCamerasByTenant: async (tenantId, params = {}) => {
     try {
       console.log('🔵 Fetching tenant cameras:', tenantId, params);
-      const response = await apiClient.get(`/cameras/tenant/${tenantId}`, { params });
+      const response = await api.get(`/cameras/tenant/${tenantId}`, { params });
       console.log('✅ Tenant cameras fetched:', response.data);
       return response.data;
     } catch (error) {
@@ -136,7 +99,7 @@ const cameraService = {
   getCamerasByBranch: async (branchId, params = {}) => {
     try {
       console.log('🔵 Fetching branch cameras:', branchId, params);
-      const response = await apiClient.get(`/cameras/branch/${branchId}`, { params });
+      const response = await api.get(`/cameras/branch/${branchId}`, { params });
       console.log('✅ Branch cameras fetched:', response.data);
       return response.data;
     } catch (error) {
@@ -149,7 +112,7 @@ const cameraService = {
   testCameraConnection: async (streamUrl) => {
     try {
       console.log('🔵 Testing camera connection:', streamUrl);
-      const response = await apiClient.post('/cameras/test-connection', { stream_url: streamUrl });
+      const response = await api.post('/cameras/test-connection', { stream_url: streamUrl });
       console.log('✅ Connection test result:', response.data);
       return response.data;
     } catch (error) {
@@ -162,7 +125,7 @@ const cameraService = {
   getLiveStream: async (id) => {
     try {
       console.log('🔵 Getting live stream for camera:', id);
-      const response = await apiClient.get(`/cameras/${id}/stream`);
+      const response = await api.get(`/cameras/${id}/stream`);
       console.log('✅ Stream info retrieved:', response.data);
       return response.data;
     } catch (error) {
@@ -175,7 +138,7 @@ const cameraService = {
   getCameraStats: async (tenantId) => {
     try {
       console.log('🔵 Fetching camera stats for tenant:', tenantId);
-      const response = await apiClient.get(`/cameras/stats/${tenantId}`);
+      const response = await api.get(`/cameras/stats/${tenantId}`);
       console.log('✅ Camera stats fetched:', response.data);
       return response.data;
     } catch (error) {
@@ -188,7 +151,7 @@ const cameraService = {
   searchCameras: async (searchTerm, tenantId) => {
     try {
       console.log('🔵 Searching cameras:', searchTerm, tenantId);
-      const response = await apiClient.get('/cameras/search', {
+      const response = await api.get('/cameras/search', {
         params: { q: searchTerm, tenant_id: tenantId }
       });
       console.log('✅ Search results:', response.data);

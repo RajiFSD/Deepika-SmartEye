@@ -1,10 +1,12 @@
 // ==========================================
 // 2. USER MANAGEMENT PAGE (UserManagementPage.jsx) - UPDATED
 // ==========================================
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Plus, Edit2, Trash2, LogOut, Shield, Search, Filter, AlertTriangle } from 'lucide-react';
 import UserFormModal from '../components/UserFormModal';
+import adminService from '../services/adminService';
+import tenantService from '../services/tenantService';
 
 function UserManagementPage({ setIsAdminAuth }) {
   const [users, setUsers] = useState([]);
@@ -15,9 +17,11 @@ function UserManagementPage({ setIsAdminAuth }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [deletingUser, setDeletingUser] = useState(null);
+  const token = localStorage.getItem('adminToken');
   const navigate = useNavigate();
 
   const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
+  console.log('Admin user from localStorage:', adminUser);
 
   useEffect(() => {
     loadUsers();
@@ -26,12 +30,10 @@ function UserManagementPage({ setIsAdminAuth }) {
 
   const loadUsers = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:3000/api/admin/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      setUsers(data.data || []);
+      console.log('Loading users with adminToken:', token);
+      const usersData = await adminService.getUsers({ limit: 1000 });      
+      const data = usersData.data;
+      setUsers(data);
     } catch (error) {
       console.error('Error loading users:', error);
     } finally {
@@ -41,12 +43,11 @@ function UserManagementPage({ setIsAdminAuth }) {
 
   const loadTenants = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:3000/api/admin/tenants', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      setTenants(data.data || []);
+      console.log('Loading tenants...');      
+      const tenantsData = await tenantService.getAllTenants({ limit: 1000 });
+      const data = tenantsData.data?.tenants || [];
+      console.log('Tenants loaded:', data);
+      setTenants(data);
     } catch (error) {
       console.error('Error loading tenants:', error);
     }
@@ -54,17 +55,9 @@ function UserManagementPage({ setIsAdminAuth }) {
 
   const handleDeleteUser = async (userId) => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(`http://localhost:3000/api/admin/users/${userId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to delete user');
-      }
-
+      console.log('Deleting user with ID:', userId);
+      const response = await adminService.deleteUser(userId, token);
+  
       loadUsers();
       setDeletingUser(null);
     } catch (error) {

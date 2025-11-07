@@ -1,12 +1,11 @@
 import api from './api';
 
 const authService = {
-  // Login user
+
   login: async (email, password) => {
     try {
       console.log('🔵 Attempting login to:', api.defaults.baseURL + '/auth/login');
-      console.log('🔵 Credentials:', { email, password: '***' });
-      
+            
       const response = await api.post('/auth/login', { email, password });
       
       console.log('✅ Login response:', response.data);
@@ -82,8 +81,7 @@ const authService = {
 
   // Get current user
   getCurrentUser: () => {
-    const userStr = localStorage.getItem('user');
-    console.log('Current user string from localStorage:', userStr);
+    const userStr = localStorage.getItem('user');   
     return userStr ? JSON.parse(userStr) : null;
   },
 

@@ -35,7 +35,7 @@ const tenantService = {
   getTenantById: async (tenantId) => {
     try {
       console.log('🔵 Fetching tenant:', tenantId);
-      
+      console.log('🔵 Endpoint:', api.defaults.baseURL + `/tenants/${tenantId}`);
       const response = await api.get(`/tenants/${tenantId}`);
       
       console.log('✅ Tenant fetched:', response.data);

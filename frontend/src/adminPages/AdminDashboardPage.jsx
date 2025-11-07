@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Users, Building2, Camera, UserSquare2, TrendingUp, Activity, AlertCircle, CheckCircle } from 'lucide-react';
+import adminService from '../services/adminService';
+import branchService from '../services/branchService';
+import cameraService from '../services/cameraService';
+import tenantService from '../services/tenantService';
 
 function AdminDashboardPage() {
   const [stats, setStats] = useState({
@@ -18,6 +22,8 @@ function AdminDashboardPage() {
     cameraStatus: 'operational',
     aiModuleStatus: 'running'
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadDashboardData();
@@ -25,52 +31,163 @@ function AdminDashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      
-      // Load users
-      const usersResponse = await fetch('http://localhost:3000/api/admin/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const usersData = await usersResponse.json();
-      
-      // Load tenants
-      const tenantsResponse = await fetch('http://localhost:3000/api/admin/tenants', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const tenantsData = await tenantsResponse.json();
+      setLoading(true);
+      setError('');
 
-      // Load branches
-      const branchesResponse = await fetch('http://localhost:3000/api/admin/branches', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const branchesData = await branchesResponse.json();
-
-      // Load cameras
-      const camerasResponse = await fetch('http://localhost:3000/api/admin/cameras', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const camerasData = await camerasResponse.json();
-
-      setStats({
-        totalUsers: usersData.data?.length || 0,
-        activeUsers: usersData.data?.filter(u => u.is_active).length || 0,
-        totalTenants: tenantsData.data?.length || 0,
-        totalBranches: branchesData.data?.length || 0,
-        totalCameras: camerasData.data?.length || 0,
-        activeCameras: camerasData.data?.filter(c => c.is_active).length || 0
-      });
-
-      // Mock recent activities
-      setRecentActivities([
-        { id: 1, type: 'user', action: 'New user created', user: 'John Doe', time: '5 minutes ago' },
-        { id: 2, type: 'camera', action: 'Camera added', user: 'Camera 12', time: '15 minutes ago' },
-        { id: 3, type: 'tenant', action: 'Tenant updated', user: 'ABC Corp', time: '1 hour ago' },
-        { id: 4, type: 'branch', action: 'Branch created', user: 'Downtown Store', time: '2 hours ago' },
-        { id: 5, type: 'user', action: 'User role changed', user: 'Jane Smith', time: '3 hours ago' }
+      // Load all data using service methods
+      const [usersData, tenantsData, branchesData, camerasData] = await Promise.all([
+        adminService.getUsers({ limit: 1000 }), // Get all users for accurate count
+        tenantService.getAllTenants({ limit: 1000 }),
+        branchService.getBranches({ limit: 1000 }),
+        cameraService.getCameras({ limit: 1000 })
       ]);
+
+      console.log('Dashboard data loaded:', { usersData, tenantsData, branchesData, camerasData });
+      
+      const userList = usersData.data || [];
+      const cameraList = camerasData.data?.cameras || [];
+      const tenantList = tenantsData.data?.tenants || [];
+      const branchList = branchesData.data?.branches || [];
+
+      console.log('Camera list:', cameraList.length);
+      console.log('branchesData:', branchesData.length, branchesData.data);
+      console.log('tenantsData:', tenantsData.length, tenantsData.data);
+      console.log('usersData:', usersData.length, usersData.data);
+
+      // Update stats
+      setStats({
+        totalUsers: userList.length,
+        activeUsers: userList.filter(u => u.is_active).length,
+        totalTenants: tenantList.length,
+        totalBranches: branchList.length,
+        totalCameras: cameraList.length,
+        activeCameras: cameraList.filter(c => c.is_active).length
+      });
+
+      // Build recent activities from real data
+      const activities = [];
+      let activityId = 1;
+
+      // Helper function to format time difference
+      const getTimeAgo = (dateString) => {
+        if (!dateString) return 'Recently';
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+        if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      };
+
+      // Sort and get latest user
+      if (userList.length > 0) {
+        const sortedUsers = [...userList].sort((a, b) => 
+          new Date(b.created_at || 0) - new Date(a.created_at || 0)
+        );
+        const latestUser = sortedUsers[0];
+        activities.push({
+          id: activityId++,
+          type: 'user',
+          action: 'New user created',
+          user: latestUser.full_name || latestUser.username || 'Unknown User',
+          time: getTimeAgo(latestUser.created_at),
+          timestamp: new Date(latestUser.created_at || 0)
+        });
+      }
+
+      // Sort and get latest camera
+      if (cameraList.length > 0) {
+        const sortedCameras = [...cameraList].sort((a, b) => 
+          new Date(b.created_at || 0) - new Date(a.created_at || 0)
+        );
+        const latestCamera = sortedCameras[0];
+        activities.push({
+          id: activityId++,
+          type: 'camera',
+          action: 'Camera added',
+          user: latestCamera.camera_name || latestCamera.rtsp_url || 'Unknown Camera',
+          time: getTimeAgo(latestCamera.created_at),
+          timestamp: new Date(latestCamera.created_at || 0)
+        });
+      }
+
+      // Sort and get latest tenant
+      if (tenantList.length > 0) {
+        const sortedTenants = [...tenantList].sort((a, b) => 
+          new Date(b.created_at || 0) - new Date(a.created_at || 0)
+        );
+        const latestTenant = sortedTenants[0];
+        activities.push({
+          id: activityId++,
+          type: 'tenant',
+          action: 'Tenant updated',
+          user: latestTenant.tenant_name || 'Unknown Tenant',
+          time: getTimeAgo(latestTenant.updated_at || latestTenant.created_at),
+          timestamp: new Date(latestTenant.updated_at || latestTenant.created_at || 0)
+        });
+      }
+
+      // Sort and get latest branch
+      if (branchList.length > 0) {
+        const sortedBranches = [...branchList].sort((a, b) => 
+          new Date(b.created_at || 0) - new Date(a.created_at || 0)
+        );
+        const latestBranch = sortedBranches[0];
+        activities.push({
+          id: activityId++,
+          type: 'branch',
+          action: 'Branch created',
+          user: latestBranch.branch_name || latestBranch.state || 'Unknown Branch',
+          time: getTimeAgo(latestBranch.created_at),
+          timestamp: new Date(latestBranch.created_at || 0)
+        });
+      }
+
+       // Check for recently updated user roles
+      if (userList.length > 0) {
+        const sortedByUpdate = [...userList].sort((a, b) => 
+          new Date(b.updated_at || 0) - new Date(a.updated_at || 0)
+        );
+        const recentlyUpdated = sortedByUpdate[0];
+        
+        // Show if updated_at exists and is different from created_at
+        // Or if updated_at is more recent than the latest created user
+        const hasUpdate = recentlyUpdated.updated_at && (
+          !recentlyUpdated.created_at || 
+          new Date(recentlyUpdated.updated_at).getTime() !== new Date(recentlyUpdated.created_at).getTime() ||
+          Math.abs(new Date(recentlyUpdated.updated_at) - new Date(recentlyUpdated.created_at)) > 1000 // More than 1 second difference
+        );
+        
+        if (hasUpdate) {
+          activities.push({
+            id: activityId++,
+            type: 'user',
+            action: 'User role changed',
+            user: recentlyUpdated.full_name || recentlyUpdated.email || 'Unknown User',
+            time: getTimeAgo(recentlyUpdated.updated_at),
+            timestamp: new Date(recentlyUpdated.updated_at)
+          });
+        }
+      }
+
+      // Sort all activities by timestamp (most recent first) and take top 5
+      const sortedActivities = activities
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 5);
+
+      setRecentActivities(sortedActivities);
+     
 
     } catch (error) {
       console.error('Error loading dashboard data:', error);
+      setError(typeof error === 'string' ? error : 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -99,6 +216,32 @@ function AdminDashboardPage() {
         return 'text-gray-600 bg-gray-100';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+        <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-medium text-red-800">Error Loading Dashboard</p>
+          <p className="text-sm text-red-600">{error}</p>
+          <button 
+            onClick={loadDashboardData}
+            className="mt-2 text-sm text-red-700 underline hover:text-red-800"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -205,25 +348,29 @@ function AdminDashboardPage() {
           <p className="text-sm text-gray-600">Latest system events and changes</p>
         </div>
         <div className="p-6">
-          <div className="space-y-4">
-            {recentActivities.map((activity) => (
-              <div key={activity.id} className="flex items-start gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  activity.type === 'user' ? 'bg-blue-100 text-blue-600' :
-                  activity.type === 'camera' ? 'bg-orange-100 text-orange-600' :
-                  activity.type === 'tenant' ? 'bg-purple-100 text-purple-600' :
-                  'bg-green-100 text-green-600'
-                }`}>
-                  {getActivityIcon(activity.type)}
+          {recentActivities.length > 0 ? (
+            <div className="space-y-4">
+              {recentActivities.map((activity) => (
+                <div key={activity.id} className="flex items-start gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    activity.type === 'user' ? 'bg-blue-100 text-blue-600' :
+                    activity.type === 'camera' ? 'bg-orange-100 text-orange-600' :
+                    activity.type === 'tenant' ? 'bg-purple-100 text-purple-600' :
+                    'bg-green-100 text-green-600'
+                  }`}>
+                    {getActivityIcon(activity.type)}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{activity.action}</p>
+                    <p className="text-xs text-gray-500">{activity.user}</p>
+                  </div>
+                  <span className="text-xs text-gray-500">{activity.time}</span>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                  <p className="text-xs text-gray-500">{activity.user}</p>
-                </div>
-                <span className="text-xs text-gray-500">{activity.time}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-500 py-8">No recent activities</p>
+          )}
         </div>
       </div>
     </div>

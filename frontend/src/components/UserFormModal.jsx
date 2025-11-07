@@ -3,6 +3,7 @@
 // ==========================================
 import { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
+import adminService from '../services/adminService';
 
 function UserFormModal({ user, tenants, onClose, onSave }) {
   const [formData, setFormData] = useState({
@@ -38,26 +39,18 @@ function UserFormModal({ user, tenants, onClose, onSave }) {
 
     try {
       const token = localStorage.getItem('adminToken');
-      const url = user 
-        ? `http://localhost:3000/api/admin/users/${user.user_id}`
-        : 'http://localhost:3000/api/admin/users';
-      
-      const method = user ? 'PUT' : 'POST';
+    
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
+      if (user) {
+      // Update existing user
+      console.log('Updating user with token:', token);
+        await adminService.updateUser(user.user_id, formData);
+        } else {
+      // Create new user
+      console.log('Creating user with token:', token);
+        await adminService.createUser(formData);
+        } 
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to save user');
-      }
 
       onSave();
     } catch (err) {

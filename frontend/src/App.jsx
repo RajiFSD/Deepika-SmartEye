@@ -155,6 +155,7 @@ import UserManagementPage from './adminPages/UserManagementPage';
 import TenantManagementPage from './adminPages/TenantManagementPage';
 import BranchManagementPage from './adminPages/BranchManagementPage';
 import CameraManagementPage from './adminPages/CameraManagementPage';
+import PaymentPlansPage from './adminPages/PaymentPlansPage';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -230,6 +231,7 @@ function App() {
           <Route path="tenants" element={<TenantManagementPage />} />
           <Route path="branches" element={<BranchManagementPage />} />
           <Route path="cameras" element={<CameraManagementPage />} />
+          <Route path="payments" element={<PaymentPlansPage />} />
         </Route>
 
         {/* ==================== USER PROTECTED ROUTES ==================== */}
