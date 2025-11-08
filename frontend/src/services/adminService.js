@@ -1,4 +1,4 @@
-// src/services/adminService.js
+// src/services/adminService.js - UPDATED
 import api from './api';
 
 const adminService = {
@@ -30,8 +30,49 @@ const adminService = {
     }
   },
 
+  // ✅ NEW: Get users by tenant ID
+  getUsersByTenantId: async (tenantId, params = {}) => {
+    try {
+      const { page = 1, limit = 10, search = '', role = '', isActive = '' } = params;
+      
+      console.log('🔵 Fetching users for tenant:', tenantId);
+      
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        ...(search && { search }),
+        ...(role && { role }),
+        ...(isActive !== '' && { is_active: isActive }),
+      });
+      
+      const response = await api.get(`/admin/tenants/${tenantId}/users?${queryParams}`);
+      
+      console.log('✅ Tenant users fetched:', response.data);
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error fetching tenant users:', error);
+      throw error.response?.data?.message || error.message || 'Failed to fetch tenant users';
+    }
+  },
 
-   login: async (email, password) => {
+  // ✅ NEW: Get user count by tenant ID
+  getUserCountByTenantId: async (tenantId) => {
+    try {
+      console.log('🔵 Fetching user count for tenant:', tenantId);
+      
+      const response = await api.get(`/admin/tenants/${tenantId}/users/count`);
+      
+      console.log('✅ User count fetched:', response.data);
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error fetching user count:', error);
+      throw error.response?.data?.message || error.message || 'Failed to fetch user count';
+    }
+  },
+
+  login: async (email, password) => {
     try {
       console.log('🔵 Attempting login to:', api.defaults.baseURL + '/admin/auth/login');
             
@@ -121,75 +162,6 @@ const adminService = {
     }
   },
 
-  // Get all tenants
-//   getTenants: async (params = {}) => {
-//     try {
-//       const { page = 1, limit = 10, search = '', isActive = '' } = params;
-      
-//       console.log('🔵 Fetching tenants from:', api.defaults.baseURL + '/admin/tenants');
-      
-//       const queryParams = new URLSearchParams({
-//         page: page.toString(),
-//         limit: limit.toString(),
-//         ...(search && { search }),
-//         ...(isActive !== '' && { is_active: isActive }),
-//       });
-      
-//       const response = await api.get(`/admin/tenants?${queryParams}`);
-//       console.log('✅ Tenants fetched:', response.data);
-//       return response.data;
-//     } catch (error) {
-//       console.error('❌ Error fetching tenants:', error);
-//       throw error.response?.data?.message || error.message || 'Failed to fetch tenants';
-//     }
-//   },
-
-  // Get all branches
-//   getBranches: async (params = {}) => {
-//     try {
-//       const { page = 1, limit = 10, search = '', isActive = '' } = params;
-      
-//       console.log('🔵 Fetching branches from:', api.defaults.baseURL + '/admin/branches');
-      
-//       const queryParams = new URLSearchParams({
-//         page: page.toString(),
-//         limit: limit.toString(),
-//         ...(search && { search }),
-//         ...(isActive !== '' && { is_active: isActive }),
-//       });
-      
-//       const response = await api.get(`/admin/branches?${queryParams}`);
-//       console.log('✅ Branches fetched:', response.data);
-//       return response.data;
-//     } catch (error) {
-//       console.error('❌ Error fetching branches:', error);
-//       throw error.response?.data?.message || error.message || 'Failed to fetch branches';
-//     }
-//   },
-
-  // Get all cameras
-//   getCameras: async (params = {}) => {
-//     try {
-//       const { page = 1, limit = 10, search = '', isActive = '' } = params;
-      
-//       console.log('🔵 Fetching cameras from:', api.defaults.baseURL + '/admin/cameras');
-      
-//       const queryParams = new URLSearchParams({
-//         page: page.toString(),
-//         limit: limit.toString(),
-//         ...(search && { search }),
-//         ...(isActive !== '' && { is_active: isActive }),
-//       });
-      
-//       const response = await api.get(`/admin/cameras?${queryParams}`);
-//       console.log('✅ Cameras fetched:', response.data);
-//       return response.data;
-//     } catch (error) {
-//       console.error('❌ Error fetching cameras:', error);
-//       throw error.response?.data?.message || error.message || 'Failed to fetch cameras';
-//     }
-//   },
-
   // Get dashboard statistics
   getDashboardStats: async () => {
     try {
@@ -202,32 +174,6 @@ const adminService = {
       throw error.response?.data?.message || error.message || 'Failed to fetch dashboard stats';
     }
   },
-
-  // Get system health
-//   getSystemHealth: async () => {
-//     try {
-//       console.log('🔵 Fetching system health');
-//       const response = await api.get('/admin/system/health');
-//       console.log('✅ System health fetched:', response.data);
-//       return response.data;
-//     } catch (error) {
-//       console.error('❌ Error fetching system health:', error);
-//       throw error.response?.data?.message || error.message || 'Failed to fetch system health';
-//     }
-//   },
-
-  // Get recent activities
-//   getRecentActivities: async (limit = 10) => {
-//     try {
-//       console.log('🔵 Fetching recent activities');
-//       const response = await api.get(`/admin/activities?limit=${limit}`);
-//       console.log('✅ Recent activities fetched:', response.data);
-//       return response.data;
-//     } catch (error) {
-//       console.error('❌ Error fetching recent activities:', error);
-//       throw error.response?.data?.message || error.message || 'Failed to fetch recent activities';
-//     }
-//   },
 };
 
 export default adminService;

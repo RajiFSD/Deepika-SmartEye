@@ -9,11 +9,17 @@ import {
   Download,
   Eye,
   Edit,
+  Trash2,
+  Plus,
+  X,
   Zap,
-  Rocket
+  Rocket,
+  Save
 } from 'lucide-react';
 import tenantService from '../services/tenantService';
 import planService from '../services/planService';
+import cameraService from '../services/cameraService';
+import adminService from '../services/adminService';
 
 function SubscriptionsPage() {
   const [loading, setLoading] = useState(false);
@@ -31,6 +37,26 @@ function SubscriptionsPage() {
   
   const [subscriptions, setSubscriptions] = useState([]);
   const [plans, setPlans] = useState([]);
+  
+  // Modal states
+  const [showModal, setShowModal] = useState(false);
+  const [modalMode, setModalMode] = useState('view'); // 'view', 'add', 'edit'
+  const [selectedSubscription, setSelectedSubscription] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+
+  // Form data
+  const [formData, setFormData] = useState({
+    tenant_name: '',
+    tenant_code: '',
+    contact_email: '',
+    contact_phone: '',
+    subscription_plan_id: '',
+    subscription_status: 'trial',
+    subscription_start_date: '',
+    subscription_end_date: '',
+    is_active: true
+  });
 
   // Icon mapping
   const iconMap = {
@@ -87,7 +113,6 @@ function SubscriptionsPage() {
       const response = await tenantService.getAllTenants(params);
       
       let tenantsData = response.data?.tenants || response.data?.rows || response.data || [];
-      console.log('Fetched tenants/subscriptions:', tenantsData);
       const paginationData = response.data?.pagination || {};
       
       // Filter by plan if needed
@@ -97,21 +122,55 @@ function SubscriptionsPage() {
         );
       }
       
-      // Transform tenant data to match subscription structure
-      const transformedSubscriptions = tenantsData.map(tenant => ({
-        id: tenant.tenant_id || tenant.id,
-        tenantName: tenant.tenant_name || tenant.name,
-        email: tenant.contact_email || tenant.email,
-        phone: tenant.contact_phone || tenant.phone,
-        plan: tenant.subscription_plan_id || tenant.plan_id || 'demo',
-        status: tenant.subscription_status || (tenant.is_active ? 'active' : 'inactive'),
-        startDate: tenant.subscription_start_date || tenant.created_at,
-        endDate: tenant.subscription_end_date,
-        nextBilling: tenant.next_billing_date,
-        cameras: tenant.camera_count || tenant.active_cameras || 0,
-        users: tenant.user_count || tenant.active_users || 0,
-        isActive: tenant.is_active
-      }));
+      // Fetch cameras and users count for each tenant using optimized endpoints
+      const transformedSubscriptions = await Promise.all(
+        tenantsData.map(async (tenant) => {
+          const tenantId = tenant.tenant_id || tenant.id;
+          let cameraCount = 0;
+          let userCount = 0;
+
+          try {
+            // Use the optimized getUserCountByTenantId endpoint
+            const userCountResponse = await adminService.getUserCountByTenantId(tenantId);
+            userCount = userCountResponse.data?.user_count || 0;
+          } catch (err) {
+            console.error(`Error fetching user count for tenant ${tenantId}:`, err);
+          }
+
+          try {
+            // Fetch cameras for this specific tenant
+            const camerasResponse = await cameraService.getCameras({
+              page: 1,
+              limit: 1000,
+              tenant_id: tenantId
+            });
+            
+            const cameras = camerasResponse.data?.cameras || camerasResponse.data?.rows || [];
+            // Filter by tenant_id to ensure accuracy
+            cameraCount = cameras.filter(cam => 
+              (cam.tenant_id || cam.tenantId) === tenantId
+            ).length;
+          } catch (err) {
+            console.error(`Error fetching cameras for tenant ${tenantId}:`, err);
+          }
+
+          return {
+            id: tenantId,
+            tenantName: tenant.tenant_name || tenant.name,
+            tenantCode: tenant.tenant_code,
+            email: tenant.contact_email || tenant.email,
+            phone: tenant.contact_phone || tenant.phone,
+            plan: tenant.subscription_plan_id || tenant.plan_id || 'demo',
+            status: tenant.subscription_status || (tenant.is_active ? 'active' : 'inactive'),
+            startDate: tenant.subscription_start_date || tenant.created_at,
+            endDate: tenant.subscription_end_date,
+            cameras: cameraCount,
+            users: userCount,
+            isActive: tenant.is_active,
+            rawData: tenant
+          };
+        })
+      );
       
       setSubscriptions(transformedSubscriptions);
       setPagination(prev => ({
@@ -124,6 +183,80 @@ function SubscriptionsPage() {
       setError('Failed to load subscriptions: ' + err.toString());
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAdd = () => {
+    setModalMode('add');
+    setFormData({
+      tenant_name: '',
+      tenant_code: '',
+      contact_email: '',
+      contact_phone: '',
+      subscription_plan_id: plans[0]?.id || '',
+      subscription_status: 'trial',
+      subscription_start_date: new Date().toISOString().split('T')[0],
+      subscription_end_date: '',
+      is_active: true
+    });
+    setShowModal(true);
+  };
+
+  const handleView = (subscription) => {
+    setModalMode('view');
+    setSelectedSubscription(subscription);
+    setShowModal(true);
+  };
+
+  const handleEdit = (subscription) => {
+    setModalMode('edit');
+    setSelectedSubscription(subscription);
+    setFormData({
+      tenant_name: subscription.tenantName,
+      tenant_code: subscription.tenantCode,
+      contact_email: subscription.email,
+      contact_phone: subscription.phone || '',
+      subscription_plan_id: subscription.plan,
+      subscription_status: subscription.status,
+      subscription_start_date: subscription.startDate ? new Date(subscription.startDate).toISOString().split('T')[0] : '',
+      subscription_end_date: subscription.endDate ? new Date(subscription.endDate).toISOString().split('T')[0] : '',
+      is_active: subscription.isActive
+    });
+    setShowModal(true);
+  };
+
+  const handleDelete = async (id) => {
+    setDeleteId(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    try {
+      await tenantService.deleteTenant(deleteId);
+      setShowDeleteConfirm(false);
+      setDeleteId(null);
+      loadSubscriptions();
+    } catch (err) {
+      console.error('Error deleting tenant:', err);
+      setError('Failed to delete tenant');
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      if (modalMode === 'add') {
+        await tenantService.createTenant(formData);
+      } else if (modalMode === 'edit') {
+        await tenantService.updateTenant(selectedSubscription.id, formData);
+      }
+      
+      setShowModal(false);
+      loadSubscriptions();
+    } catch (err) {
+      console.error('Error saving subscription:', err);
+      setError('Failed to save subscription: ' + err.toString());
     }
   };
 
@@ -149,25 +282,25 @@ function SubscriptionsPage() {
   };
 
   const handleExport = () => {
-    // Create CSV content
-    const headers = ['Tenant Name', 'Email', 'Plan', 'Status', 'Cameras', 'Users', 'Start Date', 'Next Billing'];
+    const headers = ['Tenant Name', 'Code', 'Email', 'Phone', 'Plan', 'Status', 'Cameras', 'Users', 'Start Date', 'End Date'];
     const rows = subscriptions.map(sub => [
       sub.tenantName,
+      sub.tenantCode,
       sub.email,
+      sub.phone || 'N/A',
       sub.plan,
       sub.status,
       sub.cameras,
       sub.users,
       sub.startDate ? new Date(sub.startDate).toLocaleDateString() : 'N/A',
-      sub.nextBilling ? new Date(sub.nextBilling).toLocaleDateString() : 'N/A'
+      sub.endDate ? new Date(sub.endDate).toLocaleDateString() : 'N/A'
     ]);
 
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.join(','))
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
 
-    // Download CSV
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -182,19 +315,31 @@ function SubscriptionsPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Subscriptions</h1>
-        <p className="text-gray-600">Manage customer subscriptions and usage</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Subscriptions Management</h1>
+          <p className="text-gray-600">Manage customer subscriptions, plans and usage</p>
+        </div>
+        <button
+          onClick={handleAdd}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          Add Subscription
+        </button>
       </div>
 
       {/* Error Message */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <h3 className="text-sm font-medium text-red-800">Error</h3>
             <p className="text-sm text-red-700 mt-1">{error}</p>
           </div>
+          <button onClick={() => setError('')} className="text-red-400 hover:text-red-600">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -250,7 +395,6 @@ function SubscriptionsPage() {
       {/* Filters and Search */}
       <div className="bg-white rounded-lg shadow-sm p-4">
         <div className="flex flex-col md:flex-row gap-4">
-          {/* Search */}
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -262,7 +406,6 @@ function SubscriptionsPage() {
             />
           </div>
 
-          {/* Status Filter */}
           <div className="flex items-center gap-2">
             <Filter className="w-5 h-5 text-gray-400" />
             <select
@@ -279,7 +422,6 @@ function SubscriptionsPage() {
             </select>
           </div>
 
-          {/* Plan Filter */}
           <select
             value={planFilter}
             onChange={(e) => {
@@ -294,7 +436,6 @@ function SubscriptionsPage() {
             ))}
           </select>
 
-          {/* Export Button */}
           <button
             onClick={handleExport}
             className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
@@ -335,9 +476,6 @@ function SubscriptionsPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Start Date
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Next Billing
-                    </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
@@ -346,7 +484,7 @@ function SubscriptionsPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {subscriptions.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
                         No subscriptions found
                       </td>
                     </tr>
@@ -364,6 +502,7 @@ function SubscriptionsPage() {
                               </div>
                               <div className="ml-4">
                                 <div className="text-sm font-medium text-gray-900">{sub.tenantName}</div>
+                                <div className="text-sm text-gray-500">{sub.tenantCode}</div>
                               </div>
                             </div>
                           </td>
@@ -377,7 +516,7 @@ function SubscriptionsPage() {
                             <div className="flex items-center gap-2">
                               <PlanIcon className="w-4 h-4 text-gray-500" />
                               <span className="text-sm font-medium text-gray-900 capitalize">
-                                {sub.plan}
+                                {plan?.name || sub.plan}
                               </span>
                             </div>
                           </td>
@@ -401,16 +540,30 @@ function SubscriptionsPage() {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {sub.startDate ? new Date(sub.startDate).toLocaleDateString() : 'N/A'}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {sub.nextBilling ? new Date(sub.nextBilling).toLocaleDateString() : 'N/A'}
-                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button className="text-blue-600 hover:text-blue-800 mr-3">
-                              <Eye className="w-4 h-4 inline" />
-                            </button>
-                            <button className="text-purple-600 hover:text-purple-800">
-                              <Edit className="w-4 h-4 inline" />
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              <button 
+                                onClick={() => handleView(sub)}
+                                className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors"
+                                title="View Details"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => handleEdit(sub)}
+                                className="text-purple-600 hover:text-purple-800 p-1 hover:bg-purple-50 rounded transition-colors"
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => handleDelete(sub.id)}
+                                className="text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -434,36 +587,6 @@ function SubscriptionsPage() {
                   >
                     Previous
                   </button>
-                  <div className="flex items-center gap-1">
-                    {[...Array(pagination.totalPages)].map((_, i) => {
-                      const pageNum = i + 1;
-                      if (
-                        pageNum === 1 ||
-                        pageNum === pagination.totalPages ||
-                        (pageNum >= pagination.page - 1 && pageNum <= pagination.page + 1)
-                      ) {
-                        return (
-                          <button
-                            key={pageNum}
-                            onClick={() => setPagination(prev => ({ ...prev, page: pageNum }))}
-                            className={`px-3 py-2 rounded-lg transition-colors ${
-                              pagination.page === pageNum
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                            }`}
-                          >
-                            {pageNum}
-                          </button>
-                        );
-                      } else if (
-                        pageNum === pagination.page - 2 ||
-                        pageNum === pagination.page + 2
-                      ) {
-                        return <span key={pageNum} className="px-2">...</span>;
-                      }
-                      return null;
-                    })}
-                  </div>
                   <button
                     onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
                     disabled={pagination.page >= pagination.totalPages}
@@ -477,8 +600,230 @@ function SubscriptionsPage() {
           </>
         )}
       </div>
+
+      {/* Modal for Add/Edit/View */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">
+                {modalMode === 'view' ? 'Subscription Details' : modalMode === 'add' ? 'Add New Subscription' : 'Edit Subscription'}
+              </h2>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {modalMode === 'view' ? (
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Tenant Name</label>
+                    <p className="text-gray-900">{selectedSubscription?.tenantName}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Tenant Code</label>
+                    <p className="text-gray-900">{selectedSubscription?.tenantCode}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Email</label>
+                    <p className="text-gray-900">{selectedSubscription?.email}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Phone</label>
+                    <p className="text-gray-900">{selectedSubscription?.phone || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Plan</label>
+                    <p className="text-gray-900 capitalize">{selectedSubscription?.plan}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Status</label>
+                    <span className={`px-3 py-1 inline-flex text-xs font-semibold rounded-full ${getStatusColor(selectedSubscription?.status)}`}>
+                      {selectedSubscription?.status}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Cameras</label>
+                    <p className="text-gray-900">{selectedSubscription?.cameras}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Users</label>
+                    <p className="text-gray-900">{selectedSubscription?.users}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Start Date</label>
+                    <p className="text-gray-900">{selectedSubscription?.startDate ? new Date(selectedSubscription.startDate).toLocaleDateString() : 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">End Date</label>
+                    <p className="text-gray-900">{selectedSubscription?.endDate ? new Date(selectedSubscription.endDate).toLocaleDateString() : 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.tenant_name}
+                      onChange={(e) => setFormData({...formData, tenant_name: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Code *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.tenant_code}
+                      onChange={(e) => setFormData({...formData, tenant_code: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={modalMode === 'edit'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                    <input
+                      type="email"
+                      required
+                      value={formData.contact_email}
+                      onChange={(e) => setFormData({...formData, contact_email: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={formData.contact_phone}
+                      onChange={(e) => setFormData({...formData, contact_phone: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Plan *</label>
+                    <select
+                      required
+                      value={formData.subscription_plan_id}
+                      onChange={(e) => setFormData({...formData, subscription_plan_id: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select Plan</option>
+                      {plans.map(plan => (
+                        <option key={plan.id} value={plan.id}>{plan.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status *</label>
+                    <select
+                      required
+                      value={formData.subscription_status}
+                      onChange={(e) => setFormData({...formData, subscription_status: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="trial">Trial</option>
+                      <option value="active">Active</option>
+                      <option value="suspended">Suspended</option>
+                      <option value="expired">Expired</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.subscription_start_date}
+                      onChange={(e) => setFormData({...formData, subscription_start_date: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                    <input
+                      type="date"
+                      value={formData.subscription_end_date}
+                      onChange={(e) => setFormData({...formData, subscription_end_date: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_active}
+                        onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700">Active Subscription</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                  >
+                    <Save className="w-4 h-4" />
+                    {modalMode === 'add' ? 'Create Subscription' : 'Update Subscription'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Subscription</h3>
+                <p className="text-gray-600 mb-4">
+                  Are you sure you want to delete this subscription? This action cannot be undone.
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeleteId(null);
+                    }}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-export default SubscriptionsPage;
+export default SubscriptionsPage

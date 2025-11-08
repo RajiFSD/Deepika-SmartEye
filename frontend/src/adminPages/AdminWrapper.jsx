@@ -1,5 +1,6 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Users, LogOut, Menu, X, Building2, UserSquare2, Camera, Shield, LayoutDashboard } from 'lucide-react';
+import { Users, LogOut, Menu, X, Building2, UserSquare2, Camera, 
+  Shield, LayoutDashboard , CreditCard, FileSpreadsheet , DollarSign , Layers } from 'lucide-react';
 import { useState } from 'react';
 
 function AdminWrapper({ setIsAdminAuth }) {
@@ -26,16 +27,8 @@ function AdminWrapper({ setIsAdminAuth }) {
     { path: '/admin/tenants', icon: UserSquare2, label: 'Tenants', roles: ['super_admin'] },
     { path: '/admin/branches', icon: Building2, label: 'Branches', roles: ['super_admin', 'admin', 'manager'] },
     { path: '/admin/cameras', icon: Camera, label: 'Cameras', roles: ['super_admin', 'admin', 'manager'] },
-    { path: '/admin/payments', icon: Shield, label: 'Payment Plans', roles: ['super_admin'] },
-    { path: '/admin/subscriptions', icon: Shield, label: 'Subscriptions',roles: ['super_admin']}, 
-
-    // { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: [1, 2, 3, 4] },
-    // { path: '/admin/users', icon: Users, label: 'User Management', roles: [1,2] },
-    // { path: '/admin/tenants', icon: UserSquare2, label: 'Tenants', roles: [1] },
-    // { path: '/admin/branches', icon: Building2, label: 'Branches', roles: [1,2,3] },
-    // { path: '/admin/cameras', icon: Camera, label: 'Cameras', roles: [1,2,3] },
-    // { path: '/admin/payments', icon: Shield, label: 'Payment Plans', roles: [1] },
-    // { path: '/admin/subscriptions', icon: Shield, label: 'Subscriptions',roles: [1] }, 
+    { path: '/admin/payments', icon: CreditCard, label: 'Payment Plans', roles: ['super_admin'] },
+    { path: '/admin/subscriptions', icon: Layers, label: 'Subscriptions', roles: ['super_admin'] },
 
   ];
 
