@@ -53,7 +53,7 @@ function PluginWrapper({ setIsAuthenticated }) {
         { path: '/violations', icon: Users, label: 'Detection Logs' },
         { path: '/upload', icon: Upload, label: 'Upload & Analyze' },
         { path: '/alerts', icon: AlertCircle, label: 'Alert Settings' },
-        { path: '/camera-live', icon: Camera, label: 'Live View' }
+        { path: '/camera-live', icon: Camera, label: 'Live View' },        
       ]
     },
     {
@@ -75,6 +75,15 @@ function PluginWrapper({ setIsAuthenticated }) {
         { path: '/product-catalog', icon: FileText, label: 'Product Catalog' },
         { path: '/product-detection', icon: Camera, label: 'Detection Logs' },
         { path: '/product-analytics', icon: Activity, label: 'Analytics' }
+      ]
+    },
+    {
+      id: 'objectCounter',
+      icon: Shield,
+      label: 'Object Counting',
+      items: [
+        { path: '/object-counter', icon: UserSquare2, label: 'Object Counter' }
+     
       ]
     },
   

@@ -140,6 +140,7 @@ import AlertThresholdPage from './pages/AlertThresholdPage';
 import ReportsPage from './pages/ReportsPage';
 import PluginWrapper from './pages/PluginWrapper';
 import CameraLiveViewPage from './pages/CameraLiveViewPage';
+import ObjectCounterPage from './pages/ObjectCounterPage';
 
 // Product Detection Pages
 import ProductOverviewPage from './pages/ProductOverviewPage';
@@ -156,6 +157,7 @@ import TenantManagementPage from './adminPages/TenantManagementPage';
 import BranchManagementPage from './adminPages/BranchManagementPage';
 import CameraManagementPage from './adminPages/CameraManagementPage';
 import PaymentPlansPage from './adminPages/PaymentPlansPage';
+import SubscriptionsPage from './adminPages/SubscriptionsPage';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -232,6 +234,7 @@ function App() {
           <Route path="branches" element={<BranchManagementPage />} />
           <Route path="cameras" element={<CameraManagementPage />} />
           <Route path="payments" element={<PaymentPlansPage />} />
+          <Route path="subscriptions" element={<SubscriptionsPage />} />
         </Route>
 
         {/* ==================== USER PROTECTED ROUTES ==================== */}
@@ -254,6 +257,7 @@ function App() {
           <Route path="upload" element={<UploadAnalysisPage />} />
           <Route path="alerts" element={<AlertThresholdPage />} />
           <Route path="camera-live" element={<CameraLiveViewPage />} />
+          <Route path="object-counter" element={<ObjectCounterPage />} />
           
           {/* Smoke Alert Module */}
           <Route path="smoke-detection" element={<div>Smoke Detection Page</div>} />
