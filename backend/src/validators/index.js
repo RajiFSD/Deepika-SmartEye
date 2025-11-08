@@ -433,6 +433,12 @@ const aiDetectionValidator = {
   ).min(1).max(50) // Smaller batch for real-time processing
 };
 
+const rolePluginValidator = Joi.object({
+  role_name: Joi.string()
+    .valid("super_admin", "admin", "manager", "viewer","branch_admin")
+    .required(),
+  screen_name: Joi.string().min(3).max(100).required(),
+});
 // Export all validators
 module.exports = {
   // Auth
@@ -449,6 +455,7 @@ module.exports = {
   branchValidator,
   cameraValidator,
   zoneValidator,
+  rolePluginValidator,
   
   // Business Logic
   alertThresholdValidator,
