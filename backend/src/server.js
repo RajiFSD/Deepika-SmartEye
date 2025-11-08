@@ -35,6 +35,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const cameraStreamRoutes = require('./routes/cameraStreamRoutes');
 const planRoutes = require('./routes/plan.routes');
 const ObjectCountingJobRoutes = require('./routes/objectCounting.routes');
+const rolePluginRoutes = require('./routes/rolePluginRoutes');
 
 
 class Server {
@@ -158,6 +159,7 @@ class Server {
     this.app.use('/api/camera', cameraStreamRoutes);
     this.app.use('/api/plans', planRoutes);
     this.app.use('/api/object-counting-jobs', ObjectCountingJobRoutes);
+    this.app.use('/api/role-plugins', rolePluginRoutes);
     
     // Health check
     this.app.get('/api/health', (req, res) => {

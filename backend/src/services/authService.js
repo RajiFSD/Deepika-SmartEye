@@ -1,28 +1,61 @@
-const { User, Tenant } = require("@models");
+// ✅ CRITICAL: Import from models/index.js to get associations
+const { User, Tenant, RolePlugin } = require("@models");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 class AuthService {
   async login({ email, password }) {
     try {
-      console.log("Attempting login for:", email);
+      console.log("🔐 Attempting login for:", email);
+      
+      // ✅ Find user with associations
       const user = await User.findOne({ 
         where: { email },
-        include: [{ model: Tenant, as: 'tenant' }]
+        include: [
+          { 
+            model: Tenant, 
+            as: 'tenant',
+            required: false // Make it optional in case tenant doesn't exist
+          },
+          { 
+            model: RolePlugin, 
+            as: 'role',
+            required: false // Make it optional in case role doesn't exist
+          }
+        ]
       });
       
-      if (!user) throw new Error("Invalid credentials");
-      if (!user.is_active) throw new Error("Account is deactivated");
+      if (!user) {
+        console.log("❌ User not found:", email);
+        throw new Error("Invalid credentials");
+      }
+      
+      if (!user.is_active) {
+        console.log("❌ User account is deactivated:", email);
+        throw new Error("Account is deactivated");
+      }
+
+      console.log("✅ User found:", email, "Role ID:", user.role_id);
 
       const isValidPassword = await bcrypt.compare(password, user.password_hash);
-      if (!isValidPassword) throw new Error("Invalid credentials");
+      if (!isValidPassword) {
+        console.log("❌ Invalid password for:", email);
+        throw new Error("Invalid credentials");
+      }
 
       // Update last login
       await user.update({ last_login: new Date() });
 
-      // Generate tokens
-      const token = this.generateToken(user);
+      // ✅ Get role details
+      const roleInfo = user.role ? user.role.toPermissionObject() : null;
+      
+      console.log("📋 Role info:", roleInfo);
+
+      // Generate tokens with role information
+      const token = this.generateToken(user, roleInfo);
       const refreshToken = this.generateRefreshToken(user);
+
+      console.log('✅ Login successful for:', email, 'Role:', roleInfo?.role_name);
 
       return {
         user: {
@@ -30,14 +63,20 @@ class AuthService {
           username: user.username,
           email: user.email,
           full_name: user.full_name,
-          role: user.role,
-          tenant: user.tenant
+          role_id: user.role_id,
+          role: roleInfo?.role_name || null, // ✅ Return role name string
+          role_details: roleInfo, // ✅ Full role object with screens
+          tenant: user.tenant ? {
+            tenant_id: user.tenant.tenant_id,
+            tenant_name: user.tenant.tenant_name,
+            tenant_code: user.tenant.tenant_code
+          } : null
         },
         token,
         refreshToken
       };
     } catch (error) {
-      console.error("Error during login:", error);
+      console.error("❌ Error during login:", error.message);
       throw new Error(error.message);
     }
   }
@@ -50,15 +89,28 @@ class AuthService {
       
       if (existingUser) throw new Error("User already exists");
 
+      // ✅ Validate role_id if provided
+      if (userData.role_id) {
+        const role = await RolePlugin.findByPk(userData.role_id);
+        if (!role) {
+          throw new Error("Invalid role_id provided");
+        }
+      }
+
       const hashedPassword = await bcrypt.hash(userData.password, 12);
       
-      return await User.create({
+      const newUser = await User.create({
         ...userData,
         password_hash: hashedPassword
       });
+
+      console.log('✅ User registered:', newUser.email);
+
+      // Return user without password
+      return newUser.toSafeObject();
     } catch (error) {
       console.error("Error during registration:", error);
-      throw new Error("Failed to register user");
+      throw new Error(error.message || "Failed to register user");
     }
   }
 
@@ -76,11 +128,15 @@ class AuthService {
   async refreshToken(refreshToken) {
     try {
       const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-      const user = await User.findByPk(decoded.user_id);
+      const user = await User.findByPk(decoded.user_id, {
+        include: [{ model: RolePlugin, as: 'role' }]
+      });
       
       if (!user) throw new Error("Invalid refresh token");
 
-      const newToken = this.generateToken(user);
+      const roleInfo = user.role ? user.role.toPermissionObject() : null;
+      const newToken = this.generateToken(user, roleInfo);
+      
       return { token: newToken };
     } catch (error) {
       console.error("Error refreshing token:", error);
@@ -126,14 +182,21 @@ class AuthService {
     }
   }
 
-  generateToken(user) {
+  // ✅ Include role information in JWT token
+  generateToken(user, roleInfo) {
+    const payload = { 
+      user_id: user.user_id, 
+      email: user.email,
+      role_id: user.role_id,
+      role: roleInfo ? roleInfo.role_name : null, // ✅ CRITICAL: Use 'role' not 'role_name'
+      screens: roleInfo ? roleInfo.screens : [],
+      tenant_id: user.tenant_id
+    };
+    
+    console.log('🔑 Generating JWT token with payload:', payload);
+    
     return jwt.sign(
-      { 
-        user_id: user.user_id, 
-        email: user.email,
-        role: user.role,
-        tenant_id: user.tenant_id
-      },
+      payload,
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
     );
@@ -153,6 +216,51 @@ class AuthService {
       process.env.JWT_RESET_SECRET,
       { expiresIn: '1h' }
     );
+  }
+
+  // ✅ Helper method to verify user has access to a screen
+  async verifyScreenAccess(userId, screenName) {
+    try {
+      const user = await User.findByPk(userId, {
+        include: [{ model: RolePlugin, as: 'role' }]
+      });
+
+      if (!user || !user.role) {
+        return false;
+      }
+
+      return user.role.hasAccessTo(screenName);
+    } catch (error) {
+      console.error("Error verifying screen access:", error);
+      return false;
+    }
+  }
+
+  // ✅ Get user with full role details
+  async getUserWithRole(userId) {
+    try {
+      const user = await User.findByPk(userId, {
+        include: [
+          { model: Tenant, as: 'tenant' },
+          { model: RolePlugin, as: 'role' }
+        ],
+        attributes: { exclude: ['password_hash'] }
+      });
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      const roleInfo = user.role ? user.role.toPermissionObject() : null;
+
+      return {
+        ...user.toJSON(),
+        role_details: roleInfo
+      };
+    } catch (error) {
+      console.error("Error getting user with role:", error);
+      throw error;
+    }
   }
 }
 

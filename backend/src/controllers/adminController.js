@@ -12,7 +12,8 @@ class AdminController {
   async adminLogin(req, res) {
     try {
       const result = await authService.login(req.body);
-      
+      console.log('Admin login attempt for:', result.user.email);
+      console.log('User role:', result.user.role);
       // Check if user has admin privileges
       if (result.user.role !== 'super_admin' && result.user.role !== 'admin') {
         return ResponseHandler.forbidden(res, 'Admin privileges required');
@@ -27,6 +28,7 @@ class AdminController {
   // Get all users
   async getAllUsers(req, res) {
     try {
+      console.log('Fetching all users with filters:', req.query);
       const { search, role, tenant_id, is_active } = req.query;
       
       const where = {};

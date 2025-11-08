@@ -8,7 +8,9 @@ function AdminWrapper({ setIsAdminAuth }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
+  console.log('Admin User from localStorage:', adminUser);
   const userRole = adminUser?.role || 'viewer';
+  console.log('Admin User Role:', userRole);
 
   const handleLogout = () => {
     localStorage.removeItem('adminToken');
@@ -25,7 +27,16 @@ function AdminWrapper({ setIsAdminAuth }) {
     { path: '/admin/branches', icon: Building2, label: 'Branches', roles: ['super_admin', 'admin', 'manager'] },
     { path: '/admin/cameras', icon: Camera, label: 'Cameras', roles: ['super_admin', 'admin', 'manager'] },
     { path: '/admin/payments', icon: Shield, label: 'Payment Plans', roles: ['super_admin'] },
-    { path: '/admin/subscriptions', icon: Shield, label: 'Subscriptions' }, 
+    { path: '/admin/subscriptions', icon: Shield, label: 'Subscriptions',roles: ['super_admin']}, 
+
+    // { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: [1, 2, 3, 4] },
+    // { path: '/admin/users', icon: Users, label: 'User Management', roles: [1,2] },
+    // { path: '/admin/tenants', icon: UserSquare2, label: 'Tenants', roles: [1] },
+    // { path: '/admin/branches', icon: Building2, label: 'Branches', roles: [1,2,3] },
+    // { path: '/admin/cameras', icon: Camera, label: 'Cameras', roles: [1,2,3] },
+    // { path: '/admin/payments', icon: Shield, label: 'Payment Plans', roles: [1] },
+    // { path: '/admin/subscriptions', icon: Shield, label: 'Subscriptions',roles: [1] }, 
+
   ];
 
   // 🧩 Filter menu based on role

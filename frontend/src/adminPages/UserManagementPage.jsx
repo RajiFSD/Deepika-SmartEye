@@ -54,8 +54,7 @@ function UserManagementPage({ setIsAdminAuth }) {
   };
 
   const handleDeleteUser = async (userId) => {
-    try {
-      console.log('Deleting user with ID:', userId);
+    try {     
       const response = await adminService.deleteUser(userId, token);
   
       loadUsers();

@@ -6,6 +6,8 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 
+console.log('Admin routes loaded');
+
 // Admin auth (uses same login, but checks role)
 router.post('/auth/login', adminController.adminLogin);
 

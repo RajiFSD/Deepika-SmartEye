@@ -16,6 +16,8 @@ const authService = {
       localStorage.setItem('authToken', token);
       localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
+
+     // const roleresponse = await api.post()
       
       return response.data;
     } catch (error) {
@@ -81,7 +83,8 @@ const authService = {
 
   // Get current user
   getCurrentUser: () => {
-    const userStr = localStorage.getItem('user');   
+    const userStr = localStorage.getItem('user'); 
+    console.log('Current user from localStorage:', userStr);  
     return userStr ? JSON.parse(userStr) : null;
   },
 

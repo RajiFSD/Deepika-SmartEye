@@ -27,8 +27,8 @@ function TenantManagementPage() {
 
   const user = authService.getCurrentUser();
   const isSuperAdmin = user?.role === 'super_admin';
-  console.log('Current User:', user);
-  console.log('Is Super Admin:', isSuperAdmin);
+  // console.log('Current User:', user);
+  // console.log('Is Super Admin:', isSuperAdmin);
 
   const subscriptionTypes = [
     { value: 'basic', label: 'Basic', color: 'blue', limits: '5 cameras, 1 branch, 3 users' },

@@ -31,9 +31,11 @@ const User = sequelize.define(
       type: DataTypes.STRING(255),
       allowNull: true,
     },
-    role: {
-      type: DataTypes.ENUM("super_admin", "admin", "manager", "viewer"),
-      defaultValue: "viewer",
+    // ✅ FIXED: Changed from ENUM to INTEGER to match database schema
+    role_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: "Foreign key to role_plugin table",
     },
     is_active: {
       type: DataTypes.BOOLEAN,
@@ -69,11 +71,46 @@ const User = sequelize.define(
         name: "idx_username",
         fields: ["username"],
       },
+      {
+        name: "fk_users_role_id",
+        fields: ["role_id"],
+      },
     ],
   }
 );
 
-// Define associations (add these after all models are defined)
-// User.belongsTo(Tenant, { foreignKey: 'tenant_id' });
+// ✅ Instance method to get role information
+User.prototype.getRoleInfo = async function () {
+  const RolePlugin = require('./RolePlugin');
+  if (!this.role_id) return null;
+  
+  const role = await RolePlugin.findByPk(this.role_id);
+  return role ? role.toPermissionObject() : null;
+};
+
+// ✅ Instance method to check if user has access to a screen
+User.prototype.hasAccessTo = async function (screenName) {
+  const RolePlugin = require('./RolePlugin');
+  if (!this.role_id) return false;
+  
+  const role = await RolePlugin.findByPk(this.role_id);
+  return role ? role.hasAccessTo(screenName) : false;
+};
+
+// ✅ Safe user object (without password)
+User.prototype.toSafeObject = function () {
+  return {
+    user_id: this.user_id,
+    tenant_id: this.tenant_id,
+    username: this.username,
+    email: this.email,
+    full_name: this.full_name,
+    role_id: this.role_id,
+    is_active: this.is_active,
+    last_login: this.last_login,
+    created_at: this.created_at,
+    updated_at: this.updated_at,
+  };
+};
 
 module.exports = User;

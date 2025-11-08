@@ -12,9 +12,12 @@ const { Op } = require('sequelize');
 
 class ObjectCountingService {
   constructor() {
-    this.activeProcesses = new Map();
-    this.pythonScript = path.join(__dirname, '../python/object_counter.py');
+    this.activeProcesses = new Map();   
+    this.pythonScript = path.join(__dirname, '../../../ai-module/src/models/object_counter.py');
     this.resultsDir = path.join(__dirname, '../uploads/object-counting/results');
+     console.log('🔍 Python script path:', this.pythonScript);
+    console.log('🔍 Python script exists:', fsSync.existsSync(this.pythonScript));
+
     this.ensureDirectories();
   }
 

@@ -53,8 +53,7 @@ function SubscriptionsPage() {
   const loadPlans = async () => {
     try {
       const response = await planService.getPlans();
-      const plansData = response.data?.plans || response.data || [];
-      console.log('Fetched plans:', plansData);
+      const plansData = response.data?.plans || response.data || [];  
       const transformedPlans = plansData.map(plan => ({
         id: plan.id || plan.plan_id,
         name: plan.name || plan.plan_name,
