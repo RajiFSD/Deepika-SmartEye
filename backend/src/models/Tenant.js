@@ -42,6 +42,29 @@ const Tenant = sequelize.define(
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,
     },
+
+    // Add after the existing fields in the Tenant model definition
+subscription_plan_id: {
+  type: DataTypes.STRING(50),
+  allowNull: true,
+  references: {
+    model: 'plans',
+    key: 'id'
+  },
+},
+subscription_start_date: {
+  type: DataTypes.DATE,
+  allowNull: true,
+},
+subscription_end_date: {
+  type: DataTypes.DATE,
+  allowNull: true,
+},
+subscription_status: {
+  type: DataTypes.ENUM("active", "expired", "trial", "suspended"),
+  defaultValue: "trial",
+},
+    
   },
   {
     tableName: "tenants",

@@ -33,6 +33,9 @@ const uploadAnalysisRoutes = require('./routes/uploadAnalysisRoutes');
 const alertThresholdRoutes = require('./routes/alertThreshold.routes');
 const adminRoutes = require('./routes/adminRoutes');
 const cameraStreamRoutes = require('./routes/cameraStreamRoutes');
+const planRoutes = require('./routes/plan.routes');
+const ObjectCountingJobRoutes = require('./routes/objectCounting.routes');
+
 
 class Server {
   constructor() {
@@ -153,6 +156,8 @@ class Server {
     this.app.use('/api/alert-thresholds', alertThresholdRoutes);
     this.app.use('/api/admin', adminRoutes);  
     this.app.use('/api/camera', cameraStreamRoutes);
+    this.app.use('/api/plans', planRoutes);
+    this.app.use('/api/object-counting-jobs', ObjectCountingJobRoutes);
     
     // Health check
     this.app.get('/api/health', (req, res) => {

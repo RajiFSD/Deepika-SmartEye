@@ -25,6 +25,7 @@ function AdminWrapper({ setIsAdminAuth }) {
     { path: '/admin/branches', icon: Building2, label: 'Branches', roles: ['super_admin', 'admin', 'manager'] },
     { path: '/admin/cameras', icon: Camera, label: 'Cameras', roles: ['super_admin', 'admin', 'manager'] },
     { path: '/admin/payments', icon: Shield, label: 'Payment Plans', roles: ['super_admin'] },
+    { path: '/admin/subscriptions', icon: Shield, label: 'Subscriptions' }, 
   ];
 
   // 🧩 Filter menu based on role

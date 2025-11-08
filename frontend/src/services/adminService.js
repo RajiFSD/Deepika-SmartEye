@@ -30,6 +30,30 @@ const adminService = {
     }
   },
 
+
+   login: async (email, password) => {
+    try {
+      console.log('🔵 Attempting login to:', api.defaults.baseURL + '/admin/auth/login');
+            
+      const response = await api.post('/admin/auth/login', { email, password });
+      
+      console.log('✅ Login response:', response);
+      
+      const { user, token, refreshToken } = response.data.data;
+      
+      // Store tokens and user data
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ Login error:', error);
+      console.error('❌ Error response:', error.response);
+      throw error.response?.data?.message || error.message || 'Login failed';
+    }
+  },
+
   // Get user by ID
   getUserById: async (userId) => {
     try {

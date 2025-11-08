@@ -13,6 +13,9 @@ const PeopleCountLog = require('./PeopleCountLog');
 const CurrentOccupancy = require('./CurrentOccupancy');
 const PluginJob = require('./PluginJob');
 const DetectionAccuracy = require('./DetectionAccuracy');
+const Plan = require('./Plan');
+const PlanFeature = require('./PlanFeature');
+const ObjectCountingJob = require('./objectCountingJob.model');
 
 const models = {
   Tenant,
@@ -26,6 +29,9 @@ const models = {
   CurrentOccupancy,
   PluginJob,
   DetectionAccuracy,
+  Plan,
+  PlanFeature,
+  ObjectCountingJob,
 };
 
 // ✅ Associations
@@ -103,6 +109,30 @@ PluginJob.belongsTo(Camera, { foreignKey: "camera_id", as: "camera" });
 // DetectionAccuracy Associations
 DetectionAccuracy.belongsTo(Camera, { foreignKey: "camera_id", as: "camera" });
 DetectionAccuracy.belongsTo(Tenant, { foreignKey: "tenant_id", as: "tenant" });
+
+// Plan and PlanFeature associations
+Plan.hasMany(PlanFeature, {
+  foreignKey: 'plan_id',
+  as: 'features',
+  onDelete: 'CASCADE',
+});
+
+PlanFeature.belongsTo(Plan, {
+  foreignKey: 'plan_id',
+  as: 'plan',
+});
+
+// Plan and Tenant associations
+Plan.hasMany(Tenant, {
+  foreignKey: 'subscription_plan_id',
+  as: 'subscribers',
+});
+
+Tenant.belongsTo(Plan, {
+  foreignKey: 'subscription_plan_id',
+  as: 'subscriptionPlan',
+});
+
 
 // Sync all models with the database
 const syncDatabase = async () => {

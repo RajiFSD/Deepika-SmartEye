@@ -16,6 +16,8 @@ const alertThresholdRoutes = require("./alertThreshold.routes");
 const adminRoutes = require("./adminRoutes");
 const cameraStreamRoutes = require("./cameraStreamRoutes");
 const rolePluginRoutes = require("./rolePluginRoutes");
+const planRoutes = require('./plan.routes');
+const ObjectCountingJobRoutes = require('./objectCountingJob.routes');
 
 console.log("Main routes loaded");
 router.use("/auth", authRoutes);
@@ -32,6 +34,8 @@ router.use("/upload-analysis", uploadAnalysisRoutes);
 router.use("/alert-thresholds", alertThresholdRoutes);
 router.use("/admin", adminRoutes);
 router.use("/camera", cameraStreamRoutes);
-router.use("/role-plugin", rolePluginRoutes);
+router.use("/role-plugins", rolePluginRoutes);
+router.use("/plans", planRoutes);
+router.use("/object-counting-jobs", ObjectCountingJobRoutes);   
 
 module.exports = router;
