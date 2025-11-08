@@ -8,6 +8,7 @@ function AdminWrapper({ setIsAdminAuth }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
+  const userRole = adminUser?.role || 'viewer';
 
   const handleLogout = () => {
     localStorage.removeItem('adminToken');
@@ -16,21 +17,29 @@ function AdminWrapper({ setIsAdminAuth }) {
     navigate('/admin/login');
   };
 
-  const menuItems = [
-    { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/admin/users', icon: Users, label: 'User Management' },
-    { path: '/admin/tenants', icon: UserSquare2, label: 'Tenants' },
-    { path: '/admin/branches', icon: Building2, label: 'Branches' },
-    { path: '/admin/cameras', icon: Camera, label: 'Cameras' },
-    { path: '/admin/payments', icon: Shield, label: 'Payment Plans' },
+  // 🎯 Define all possible menu items
+  const allMenuItems = [
+    { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'admin', 'manager', 'viewer'] },
+    { path: '/admin/users', icon: Users, label: 'User Management', roles: ['super_admin', 'admin'] },
+    { path: '/admin/tenants', icon: UserSquare2, label: 'Tenants', roles: ['super_admin'] },
+    { path: '/admin/branches', icon: Building2, label: 'Branches', roles: ['super_admin', 'admin', 'manager'] },
+    { path: '/admin/cameras', icon: Camera, label: 'Cameras', roles: ['super_admin', 'admin', 'manager'] },
+    { path: '/admin/payments', icon: Shield, label: 'Payment Plans', roles: ['super_admin'] },
   ];
+
+  // 🧩 Filter menu based on role
+  const menuItems = allMenuItems.filter(item => item.roles.includes(userRole));
 
   const isActive = (path) => location.pathname === path;
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 h-screen bg-white border-r border-gray-200 shadow-lg z-40 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-0 -translate-x-full'}`}>
+      <aside
+        className={`fixed left-0 top-0 h-screen bg-white border-r border-gray-200 shadow-lg z-40 transition-all duration-300 ${
+          sidebarOpen ? 'w-64' : 'w-0 -translate-x-full'
+        }`}
+      >
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="px-6 py-4 border-b border-gray-200">
@@ -40,7 +49,7 @@ function AdminWrapper({ setIsAdminAuth }) {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900">Admin Panel</h1>
-                <p className="text-xs text-gray-500">System Management</p>
+                <p className="text-xs text-gray-500 capitalize">{userRole} access</p>
               </div>
             </div>
           </div>
@@ -73,12 +82,12 @@ function AdminWrapper({ setIsAdminAuth }) {
             <div className="flex items-center gap-3 px-4 py-2 mb-2">
               <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
                 <span className="text-white text-sm font-bold">
-                  {adminUser.full_name?.charAt(0) || 'A'}
+                  {adminUser.full_name?.charAt(0)?.toUpperCase() || 'A'}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{adminUser.full_name}</p>
-                <p className="text-xs text-gray-500 truncate">{adminUser.role}</p>
+                <p className="text-sm font-medium text-gray-900 truncate">{adminUser.full_name || 'Admin User'}</p>
+                <p className="text-xs text-gray-500 truncate capitalize">{userRole}</p>
               </div>
             </div>
             <button
@@ -103,25 +112,25 @@ function AdminWrapper({ setIsAdminAuth }) {
             >
               {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
-            
+
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 rounded-lg">
                 <Shield className="w-4 h-4 text-purple-600" />
-                <span className="text-sm font-medium text-purple-900">Admin Access</span>
+                <span className="text-sm font-medium text-purple-900 capitalize">{userRole}</span>
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">
-                  {new Date().toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
+                  {new Date().toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
                   })}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {new Date().toLocaleTimeString('en-US', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
+                  {new Date().toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
                   })}
                 </p>
               </div>
