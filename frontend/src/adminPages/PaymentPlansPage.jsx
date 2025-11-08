@@ -17,11 +17,6 @@ import {
   Plus,
   Trash2,
   Save,
-  XCircle,
-  AlertCircle,
-  Plus,
-  Trash2,
-  Save,
   XCircle
 } from 'lucide-react';
 import planService from '../services/planService';
