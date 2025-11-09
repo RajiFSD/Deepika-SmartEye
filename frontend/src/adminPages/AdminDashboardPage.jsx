@@ -80,12 +80,12 @@ function AdminDashboardPage() {
       const branchList = dataMap.branches?.data?.branches || [];
       const cameraList = dataMap.cameras?.data?.cameras || [];
 
-      console.log('📊 Data loaded:', {
-        users: userList.length,
-        tenants: tenantList.length,
-        branches: branchList.length,
-        cameras: cameraList.length
-      });
+      // console.log('📊 Data loaded:', {
+      //   users: userList.length,
+      //   tenants: tenantList.length,
+      //   branches: branchList.length,
+      //   cameras: cameraList.length
+      // });
 
       // Update stats based on role
       if (isSuperAdmin) {

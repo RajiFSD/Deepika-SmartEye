@@ -8,6 +8,7 @@ import {
   Users,
   Camera,
   Clock,
+  Crown,
   Shield,
   TrendingUp,
   CheckCircle,
@@ -17,6 +18,10 @@ import {
   Plus,
   Trash2,
   Save,
+  Star,
+  Layers,
+  Trophy,
+  Gem,
   XCircle
 } from 'lucide-react';
 import planService from '../services/planService';
@@ -57,11 +62,11 @@ function PaymentPlansPage() {
   // Icon mapping
   const iconMap = {
     'demo': Zap,
-    'free': Zap,
+    'free': Star,
     'intermediate': Building2,
-    'standard': Building2,
+    'standard': Crown,
     'enterprise': Rocket,
-    'premium': Rocket
+    'premium': Gem,
   };
 
   const colorMap = {
@@ -157,6 +162,7 @@ function PaymentPlansPage() {
       const response = await planService.getPlanStats();
       
       const statsData = response.data || {};
+      //console.log('✅ Plan stats fetched:', statsData);
       setStats({
         totalRevenue: statsData.totalRevenue || 0,
         activeSubscriptions: statsData.activeSubscriptions || 0,

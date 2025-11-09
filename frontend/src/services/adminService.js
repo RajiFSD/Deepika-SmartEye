@@ -17,10 +17,9 @@ const adminService = {
         ...(isActive !== '' && { is_active: isActive }),
       });
       
-      console.log('🔵 Query Params:', queryParams.toString());
-      const response = await api.get(`/admin/users?${queryParams}`);
-      
-      console.log('✅ Users fetched:', response.data);
+      //console.log('🔵 Query Params:', queryParams.toString());
+      const response = await api.get(`/admin/users?${queryParams}`);     
+
       
       return response.data;
     } catch (error) {
@@ -47,8 +46,7 @@ const adminService = {
       
       const response = await api.get(`/admin/tenants/${tenantId}/users?${queryParams}`);
       
-      console.log('✅ Tenant users fetched:', response.data);
-      
+        
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching tenant users:', error);
@@ -59,11 +57,11 @@ const adminService = {
   // ✅ NEW: Get user count by tenant ID
   getUserCountByTenantId: async (tenantId) => {
     try {
-      console.log('🔵 Fetching user count for tenant:', tenantId);
+      //console.log('🔵 Fetching user count for tenant:', tenantId);
       
       const response = await api.get(`/admin/tenants/${tenantId}/users/count`);
       
-      console.log('✅ User count fetched:', response.data);
+      //console.log('✅ User count fetched:', response.data);
       
       return response.data;
     } catch (error) {
@@ -74,11 +72,11 @@ const adminService = {
 
   login: async (email, password) => {
     try {
-      console.log('🔵 Attempting login to:', api.defaults.baseURL + '/admin/auth/login');
+      //console.log('🔵 Attempting login to:', api.defaults.baseURL + '/admin/auth/login');
             
       const response = await api.post('/admin/auth/login', { email, password });
       
-      console.log('✅ Login response:', response);
+      //console.log('✅ Login response:', response);
       
       const { user, token, refreshToken } = response.data.data;
       
@@ -98,9 +96,9 @@ const adminService = {
   // Get user by ID
   getUserById: async (userId) => {
     try {
-      console.log('🔵 Fetching user:', userId);
+      //console.log('🔵 Fetching user:', userId);
       const response = await api.get(`/admin/users/${userId}`);
-      console.log('✅ User fetched:', response.data);
+      //console.log('✅ User fetched:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching user:', error);
@@ -111,9 +109,9 @@ const adminService = {
   // Create new user
   createUser: async (userData) => {
     try {
-      console.log('🔵 Creating user:', userData);
+      //console.log('🔵 Creating user:', userData);
       const response = await api.post('/admin/users', userData);
-      console.log('✅ User created:', response.data);
+      //console.log('✅ User created:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error creating user:', error);
@@ -125,9 +123,9 @@ const adminService = {
   // Update user
   updateUser: async (userId, userData) => {
     try {
-      console.log('🔵 Updating user:', userId, userData);
+      //console.log('🔵 Updating user:', userId, userData);
       const response = await api.put(`/admin/users/${userId}`, userData);
-      console.log('✅ User updated:', response.data);
+      //console.log('✅ User updated:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error updating user:', error);
@@ -139,9 +137,9 @@ const adminService = {
   // Delete user
   deleteUser: async (userId) => {
     try {
-      console.log('🔵 Deleting user:', userId);
+     // console.log('🔵 Deleting user:', userId);
       const response = await api.delete(`/admin/users/${userId}`);
-      console.log('✅ User deleted:', response.data);
+     // console.log('✅ User deleted:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error deleting user:', error);
@@ -152,9 +150,9 @@ const adminService = {
   // Update user status
   updateUserStatus: async (userId, isActive) => {
     try {
-      console.log('🔵 Updating user status:', userId, isActive);
+     // console.log('🔵 Updating user status:', userId, isActive);
       const response = await api.put(`/admin/users/${userId}/status`, { is_active: isActive });
-      console.log('✅ User status updated:', response.data);
+      //console.log('✅ User status updated:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error updating user status:', error);
@@ -165,9 +163,9 @@ const adminService = {
   // Get dashboard statistics
   getDashboardStats: async () => {
     try {
-      console.log('🔵 Fetching dashboard stats');
+     // console.log('🔵 Fetching dashboard stats');
       const response = await api.get('/admin/dashboard/stats');
-      console.log('✅ Dashboard stats fetched:', response.data);
+     // console.log('✅ Dashboard stats fetched:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching dashboard stats:', error);

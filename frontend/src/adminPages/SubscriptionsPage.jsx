@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Building2,
+  Ban,
   Users,
   Camera,
   AlertCircle,
@@ -24,6 +25,7 @@ import adminService from '../services/adminService';
 function SubscriptionsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [planFilter, setPlanFilter] = useState('all');
@@ -37,6 +39,7 @@ function SubscriptionsPage() {
   
   const [subscriptions, setSubscriptions] = useState([]);
   const [plans, setPlans] = useState([]);
+  const [availableTenants, setAvailableTenants] = useState([]);
   
   // Modal states
   const [showModal, setShowModal] = useState(false);
@@ -45,17 +48,13 @@ function SubscriptionsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
 
-  // Form data
+  // Form data - only subscription-related fields
   const [formData, setFormData] = useState({
-    tenant_name: '',
-    tenant_code: '',
-    contact_email: '',
-    contact_phone: '',
+    tenant_id: '',
     subscription_plan_id: '',
     subscription_status: 'trial',
     subscription_start_date: '',
-    subscription_end_date: '',
-    is_active: true
+    subscription_end_date: ''
   });
 
   // Icon mapping
@@ -92,6 +91,23 @@ function SubscriptionsPage() {
     }
   };
 
+  const loadAvailableTenants = async () => {
+    try {
+      // Get all tenants
+      const response = await tenantService.getAllTenants({ page: 1, limit: 1000 });
+      const allTenants = response.data?.tenants || response.data?.rows || [];
+      
+      // Filter tenants that don't have a subscription plan
+      const tenantsWithoutPlan = allTenants.filter(tenant => 
+        !tenant.subscription_plan_id || tenant.subscription_plan_id === null
+      );
+      
+      setAvailableTenants(tenantsWithoutPlan);
+    } catch (err) {
+      console.error('Error loading available tenants:', err);
+    }
+  };
+
   const loadSubscriptions = async () => {
     try {
       setLoading(true);
@@ -106,14 +122,20 @@ function SubscriptionsPage() {
         params.search = searchTerm;
       }
 
-      if (statusFilter !== 'all') {
-        params.isActive = statusFilter === 'active' ? 'true' : 'false';
-      }
-
       const response = await tenantService.getAllTenants(params);
       
       let tenantsData = response.data?.tenants || response.data?.rows || response.data || [];
       const paginationData = response.data?.pagination || {};
+      
+      // Filter only tenants WITH subscription plans
+      tenantsData = tenantsData.filter(t => t.subscription_plan_id);
+      
+      // Filter by status if needed
+      if (statusFilter !== 'all') {
+        tenantsData = tenantsData.filter(t => 
+          (t.subscription_status || 'trial').toLowerCase() === statusFilter.toLowerCase()
+        );
+      }
       
       // Filter by plan if needed
       if (planFilter !== 'all') {
@@ -122,7 +144,7 @@ function SubscriptionsPage() {
         );
       }
       
-      // Fetch cameras and users count for each tenant using optimized endpoints
+      // Fetch cameras and users count for each tenant
       const transformedSubscriptions = await Promise.all(
         tenantsData.map(async (tenant) => {
           const tenantId = tenant.tenant_id || tenant.id;
@@ -130,7 +152,6 @@ function SubscriptionsPage() {
           let userCount = 0;
 
           try {
-            // Use the optimized getUserCountByTenantId endpoint
             const userCountResponse = await adminService.getUserCountByTenantId(tenantId);
             userCount = userCountResponse.data?.user_count || 0;
           } catch (err) {
@@ -138,7 +159,6 @@ function SubscriptionsPage() {
           }
 
           try {
-            // Fetch cameras for this specific tenant
             const camerasResponse = await cameraService.getCameras({
               page: 1,
               limit: 1000,
@@ -146,7 +166,6 @@ function SubscriptionsPage() {
             });
             
             const cameras = camerasResponse.data?.cameras || camerasResponse.data?.rows || [];
-            // Filter by tenant_id to ensure accuracy
             cameraCount = cameras.filter(cam => 
               (cam.tenant_id || cam.tenantId) === tenantId
             ).length;
@@ -160,9 +179,9 @@ function SubscriptionsPage() {
             tenantCode: tenant.tenant_code,
             email: tenant.contact_email || tenant.email,
             phone: tenant.contact_phone || tenant.phone,
-            plan: tenant.subscription_plan_id || tenant.plan_id || 'demo',
-            status: tenant.subscription_status || (tenant.is_active ? 'active' : 'inactive'),
-            startDate: tenant.subscription_start_date || tenant.created_at,
+            plan: tenant.subscription_plan_id || tenant.plan_id,
+            status: tenant.subscription_status || 'trial',
+            startDate: tenant.subscription_start_date,
             endDate: tenant.subscription_end_date,
             cameras: cameraCount,
             users: userCount,
@@ -186,18 +205,15 @@ function SubscriptionsPage() {
     }
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
+    await loadAvailableTenants();
     setModalMode('add');
     setFormData({
-      tenant_name: '',
-      tenant_code: '',
-      contact_email: '',
-      contact_phone: '',
+      tenant_id: '',
       subscription_plan_id: plans[0]?.id || '',
       subscription_status: 'trial',
       subscription_start_date: new Date().toISOString().split('T')[0],
-      subscription_end_date: '',
-      is_active: true
+      subscription_end_date: ''
     });
     setShowModal(true);
   };
@@ -212,15 +228,11 @@ function SubscriptionsPage() {
     setModalMode('edit');
     setSelectedSubscription(subscription);
     setFormData({
-      tenant_name: subscription.tenantName,
-      tenant_code: subscription.tenantCode,
-      contact_email: subscription.email,
-      contact_phone: subscription.phone || '',
+      tenant_id: subscription.id,
       subscription_plan_id: subscription.plan,
       subscription_status: subscription.status,
       subscription_start_date: subscription.startDate ? new Date(subscription.startDate).toISOString().split('T')[0] : '',
-      subscription_end_date: subscription.endDate ? new Date(subscription.endDate).toISOString().split('T')[0] : '',
-      is_active: subscription.isActive
+      subscription_end_date: subscription.endDate ? new Date(subscription.endDate).toISOString().split('T')[0] : ''
     });
     setShowModal(true);
   };
@@ -232,13 +244,22 @@ function SubscriptionsPage() {
 
   const confirmDelete = async () => {
     try {
-      await tenantService.deleteTenant(deleteId);
+      // Only nullify subscription fields, don't touch is_active
+      await tenantService.updateTenant(deleteId, {
+        subscription_plan_id: null,
+        subscription_status: null,
+        subscription_start_date: null,
+        subscription_end_date: null
+      });
+      
+      setSuccess('Subscription removed successfully!');
       setShowDeleteConfirm(false);
       setDeleteId(null);
       loadSubscriptions();
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      console.error('Error deleting tenant:', err);
-      setError('Failed to delete tenant');
+      console.error('Error removing subscription:', err);
+      setError('Failed to remove subscription');
     }
   };
 
@@ -247,13 +268,28 @@ function SubscriptionsPage() {
     
     try {
       if (modalMode === 'add') {
-        await tenantService.createTenant(formData);
+        // Update tenant with subscription details
+        await tenantService.updateTenant(formData.tenant_id, {
+          subscription_plan_id: formData.subscription_plan_id,
+          subscription_status: formData.subscription_status,
+          subscription_start_date: formData.subscription_start_date,
+          subscription_end_date: formData.subscription_end_date || null
+        });
+        setSuccess('Subscription added successfully!');
       } else if (modalMode === 'edit') {
-        await tenantService.updateTenant(selectedSubscription.id, formData);
+        // Update only subscription fields
+        await tenantService.updateTenant(selectedSubscription.id, {
+          subscription_plan_id: formData.subscription_plan_id,
+          subscription_status: formData.subscription_status,
+          subscription_start_date: formData.subscription_start_date,
+          subscription_end_date: formData.subscription_end_date || null
+        });
+        setSuccess('Subscription updated successfully!');
       }
       
       setShowModal(false);
       loadSubscriptions();
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error('Error saving subscription:', err);
       setError('Failed to save subscription: ' + err.toString());
@@ -265,7 +301,6 @@ function SubscriptionsPage() {
       case 'active':
         return 'bg-green-100 text-green-800';
       case 'expired':
-      case 'inactive':
         return 'bg-red-100 text-red-800';
       case 'trial':
         return 'bg-yellow-100 text-yellow-800';
@@ -282,12 +317,10 @@ function SubscriptionsPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Tenant Name', 'Code', 'Email', 'Phone', 'Plan', 'Status', 'Cameras', 'Users', 'Start Date', 'End Date'];
+    const headers = ['Tenant Name', 'Code', 'Plan', 'Status', 'Cameras', 'Users', 'Start Date', 'End Date'];
     const rows = subscriptions.map(sub => [
       sub.tenantName,
       sub.tenantCode,
-      sub.email,
-      sub.phone || 'N/A',
       sub.plan,
       sub.status,
       sub.cameras,
@@ -318,7 +351,7 @@ function SubscriptionsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Subscriptions Management</h1>
-          <p className="text-gray-600">Manage customer subscriptions, plans and usage</p>
+          <p className="text-gray-600">Manage customer subscriptions and plans</p>
         </div>
         <button
           onClick={handleAdd}
@@ -328,6 +361,20 @@ function SubscriptionsPage() {
           Add Subscription
         </button>
       </div>
+
+      {/* Success Message */}
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="text-sm font-medium text-green-800">Success</h3>
+            <p className="text-sm text-green-700 mt-1">{success}</p>
+          </div>
+          <button onClick={() => setSuccess('')} className="text-green-400 hover:text-green-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Error Message */}
       {error && (
@@ -344,7 +391,8 @@ function SubscriptionsPage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+    
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-2">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -352,7 +400,7 @@ function SubscriptionsPage() {
             </div>
           </div>
           <p className="text-sm text-gray-600 mb-1">Total Subscriptions</p>
-          <p className="text-2xl font-bold text-gray-900">{pagination.total}</p>
+          <p className="text-2xl font-bold text-gray-900">{subscriptions.length}</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6">
@@ -385,12 +433,26 @@ function SubscriptionsPage() {
               <AlertCircle className="w-5 h-5 text-red-600" />
             </div>
           </div>
-          <p className="text-sm text-gray-600 mb-1">Inactive</p>
+          <p className="text-sm text-gray-600 mb-1">Expired</p>
           <p className="text-2xl font-bold text-gray-900">
-            {subscriptions.filter(s => s.status === 'inactive' || !s.isActive).length}
+            {subscriptions.filter(s => s.status === 'expired').length}
           </p>
         </div>
+
+            <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="flex items-center justify-between mb-2">
+            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+              <Ban className="w-5 h-5 text-red-600" />
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 mb-1">suspended</p>
+          <p className="text-2xl font-bold text-gray-900">
+            {subscriptions.filter(s => s.status === 'suspended').length}
+          </p>
+        </div>
+
       </div>
+      
 
       {/* Filters and Search */}
       <div className="bg-white rounded-lg shadow-sm p-4">
@@ -399,7 +461,7 @@ function SubscriptionsPage() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by tenant name or email..."
+              placeholder="Search by tenant name..."
               value={searchTerm}
               onChange={(e) => handleSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -418,7 +480,9 @@ function SubscriptionsPage() {
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="trial">Trial</option>
+              <option value="expired">Expired</option>
+              <option value="suspended">Suspended</option>
             </select>
           </div>
 
@@ -462,9 +526,6 @@ function SubscriptionsPage() {
                       Tenant
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Plan
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -475,6 +536,9 @@ function SubscriptionsPage() {
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Start Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      End Date
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -507,12 +571,6 @@ function SubscriptionsPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{sub.email}</div>
-                            {sub.phone && (
-                              <div className="text-sm text-gray-500">{sub.phone}</div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               <PlanIcon className="w-4 h-4 text-gray-500" />
                               <span className="text-sm font-medium text-gray-900 capitalize">
@@ -540,6 +598,9 @@ function SubscriptionsPage() {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {sub.startDate ? new Date(sub.startDate).toLocaleDateString() : 'N/A'}
                           </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {sub.endDate ? new Date(sub.endDate).toLocaleDateString() : 'N/A'}
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex items-center justify-end gap-2">
                               <button 
@@ -559,7 +620,7 @@ function SubscriptionsPage() {
                               <button 
                                 onClick={() => handleDelete(sub.id)}
                                 className="text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors"
-                                title="Delete"
+                                title="Remove Subscription"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -577,7 +638,7 @@ function SubscriptionsPage() {
             {pagination.totalPages > 1 && (
               <div className="flex items-center justify-between bg-gray-50 px-6 py-4 border-t border-gray-200">
                 <div className="text-sm text-gray-600">
-                  Showing page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
+                  Showing page {pagination.page} of {pagination.totalPages}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -626,14 +687,6 @@ function SubscriptionsPage() {
                     <p className="text-gray-900">{selectedSubscription?.tenantCode}</p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-700">Email</label>
-                    <p className="text-gray-900">{selectedSubscription?.email}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Phone</label>
-                    <p className="text-gray-900">{selectedSubscription?.phone || 'N/A'}</p>
-                  </div>
-                  <div>
                     <label className="text-sm font-medium text-gray-700">Plan</label>
                     <p className="text-gray-900 capitalize">{selectedSubscription?.plan}</p>
                   </div>
@@ -644,14 +697,6 @@ function SubscriptionsPage() {
                     </span>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-700">Cameras</label>
-                    <p className="text-gray-900">{selectedSubscription?.cameras}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Users</label>
-                    <p className="text-gray-900">{selectedSubscription?.users}</p>
-                  </div>
-                  <div>
                     <label className="text-sm font-medium text-gray-700">Start Date</label>
                     <p className="text-gray-900">{selectedSubscription?.startDate ? new Date(selectedSubscription.startDate).toLocaleDateString() : 'N/A'}</p>
                   </div>
@@ -659,51 +704,49 @@ function SubscriptionsPage() {
                     <label className="text-sm font-medium text-gray-700">End Date</label>
                     <p className="text-gray-900">{selectedSubscription?.endDate ? new Date(selectedSubscription.endDate).toLocaleDateString() : 'N/A'}</p>
                   </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Cameras</label>
+                    <p className="text-gray-900">{selectedSubscription?.cameras}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Users</label>
+                    <p className="text-gray-900">{selectedSubscription?.users}</p>
+                  </div>
                 </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.tenant_name}
-                      onChange={(e) => setFormData({...formData, tenant_name: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Code *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.tenant_code}
-                      onChange={(e) => setFormData({...formData, tenant_code: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={modalMode === 'edit'}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                    <input
-                      type="email"
-                      required
-                      value={formData.contact_email}
-                      onChange={(e) => setFormData({...formData, contact_email: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                    <input
-                      type="tel"
-                      value={formData.contact_phone}
-                      onChange={(e) => setFormData({...formData, contact_phone: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
+                <div className="grid grid-cols-1 gap-4">
+                  {modalMode === 'add' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tenant *</label>
+                      <select
+                        required
+                        value={formData.tenant_id}
+                        onChange={(e) => setFormData({...formData, tenant_id: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select Tenant</option>
+                        {availableTenants.map(tenant => (
+                          <option key={tenant.tenant_id} value={tenant.tenant_id}>
+                            {tenant.tenant_name} ({tenant.tenant_code})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-gray-500">Only tenants without subscriptions are shown</p>
+                    </div>
+                  )}
+                  
+                  {modalMode === 'edit' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tenant</label>
+                      <div className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700">
+                        {selectedSubscription?.tenantName} ({selectedSubscription?.tenantCode})
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">Tenant cannot be changed</p>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Plan *</label>
                     <select
@@ -718,6 +761,7 @@ function SubscriptionsPage() {
                       ))}
                     </select>
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Status *</label>
                     <select
@@ -732,35 +776,27 @@ function SubscriptionsPage() {
                       <option value="expired">Expired</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
-                    <input
-                      type="date"
-                      required
-                      value={formData.subscription_start_date}
-                      onChange={(e) => setFormData({...formData, subscription_start_date: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                    <input
-                      type="date"
-                      value={formData.subscription_end_date}
-                      onChange={(e) => setFormData({...formData, subscription_end_date: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="flex items-center gap-2">
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
                       <input
-                        type="checkbox"
-                        checked={formData.is_active}
-                        onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        type="date"
+                        required
+                        value={formData.subscription_start_date}
+                        onChange={(e) => setFormData({...formData, subscription_start_date: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
-                      <span className="text-sm font-medium text-gray-700">Active Subscription</span>
-                    </label>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={formData.subscription_end_date}
+                        onChange={(e) => setFormData({...formData, subscription_end_date: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
                   </div>
                 </div>
                 
@@ -777,7 +813,7 @@ function SubscriptionsPage() {
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
                   >
                     <Save className="w-4 h-4" />
-                    {modalMode === 'add' ? 'Create Subscription' : 'Update Subscription'}
+                    {modalMode === 'add' ? 'Add Subscription' : 'Update Subscription'}
                   </button>
                 </div>
               </form>
@@ -795,9 +831,9 @@ function SubscriptionsPage() {
                 <AlertCircle className="w-6 h-6 text-red-600" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Subscription</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Remove Subscription</h3>
                 <p className="text-gray-600 mb-4">
-                  Are you sure you want to delete this subscription? This action cannot be undone.
+                  Are you sure you want to remove this subscription? The tenant will remain active but without a subscription plan.
                 </p>
                 <div className="flex justify-end gap-3">
                   <button
@@ -814,7 +850,7 @@ function SubscriptionsPage() {
                     className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
-                    Delete
+                    Remove
                   </button>
                 </div>
               </div>
@@ -826,4 +862,4 @@ function SubscriptionsPage() {
   );
 }
 
-export default SubscriptionsPage
+export default SubscriptionsPage;

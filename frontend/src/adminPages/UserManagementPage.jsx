@@ -21,16 +21,14 @@ function UserManagementPage({ setIsAdminAuth }) {
   const navigate = useNavigate();
 
   const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
-  console.log('Admin user from localStorage:', adminUser);
-
+  
   useEffect(() => {
     loadUsers();
     loadTenants();
   }, []);
 
   const loadUsers = async () => {
-    try {
-      console.log('Loading users with adminToken:', token);
+    try {      
       const usersData = await adminService.getUsers({ limit: 1000 });      
       const data = usersData.data;
       setUsers(data);
@@ -42,11 +40,9 @@ function UserManagementPage({ setIsAdminAuth }) {
   };
 
   const loadTenants = async () => {
-    try {
-      console.log('Loading tenants...');      
+    try {         
       const tenantsData = await tenantService.getAllTenants({ limit: 1000 });
-      const data = tenantsData.data?.tenants || [];
-      console.log('Tenants loaded:', data);
+      const data = tenantsData.data?.tenants || [];      
       setTenants(data);
     } catch (error) {
       console.error('Error loading tenants:', error);

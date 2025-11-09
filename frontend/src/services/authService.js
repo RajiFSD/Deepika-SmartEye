@@ -46,6 +46,8 @@ const authService = {
       localStorage.removeItem('authToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      localStorage.removeItem('adminToken');
+      localStorage.removeItem('adminUser'); 
       
       return { success: true };
     } catch (error) {
