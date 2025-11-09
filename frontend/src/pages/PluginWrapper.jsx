@@ -3,6 +3,7 @@ import { LayoutDashboard, Settings, Upload, AlertCircle, FileText,
   LogOut, Users, Menu, X, Camera, Building2, UserSquare2, Flame, Bell, Activity, 
   ChevronDown, ChevronRight, Shield, Package } from 'lucide-react';
 import { useState } from 'react';
+import authService from '../services/authService';
 
 function PluginWrapper({ setIsAuthenticated }) {
   const navigate = useNavigate();
@@ -12,15 +13,14 @@ function PluginWrapper({ setIsAuthenticated }) {
     peopleCounting: false,
     smokeAlert: false,
     productDetection: false,
-    admin: false
+    admin: false  
   });
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-  const handleLogout = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
+  const handleLogout = () => {    
     setIsAuthenticated(false);
+    authService.logout();
     navigate('/login');
   };
 
@@ -256,7 +256,7 @@ function PluginWrapper({ setIsAuthenticated }) {
               className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
             >
               <LogOut className="w-5 h-5" />
-              <span className="font-medium">Logout</span>
+              <span className="font-medium">Sign Out</span>
             </button>
           </div>
         </div>

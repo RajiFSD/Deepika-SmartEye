@@ -7,6 +7,7 @@ import { Users, Plus, Edit2, Trash2, LogOut, Shield, Search, Filter, AlertTriang
 import UserFormModal from '../components/UserFormModal';
 import adminService from '../services/adminService';
 import tenantService from '../services/tenantService';
+import authService from '../services/authService';
 
 function UserManagementPage({ setIsAdminAuth }) {
   const [users, setUsers] = useState([]);
@@ -62,9 +63,8 @@ function UserManagementPage({ setIsAdminAuth }) {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('adminToken');
-    localStorage.removeItem('adminUser');
-    setIsAdminAuth(false);
+    setIsAuthenticated(false);
+    authService.logout();
     navigate('/admin/login');
   };
 

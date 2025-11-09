@@ -19,7 +19,7 @@ const authService = {
      
       localStorage.setItem('tenantId', tenantData); 
 
-     // const roleresponse = await api.post()
+     console.log("Login response--",response.data);
       
       return response.data;
     } catch (error) {
@@ -41,26 +41,26 @@ const authService = {
 
   // Logout user
   logout: async () => {
-    try {
-      await api.post('/auth/logout');
-      
-      // Clear local storage
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      localStorage.removeItem('adminToken');
-      localStorage.removeItem('adminUser'); 
-      
-      return { success: true };
-    } catch (error) {
-      // Even if API call fails, clear local storage
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      
-      throw error.response?.data?.message || 'Logout failed';
-    }
-  },
+  const clearStorage = () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminUser');
+    localStorage.removeItem('tenantId');
+  };
+
+  try {
+    await api.post('/auth/logout');
+  } catch (error) {
+    console.error('Logout API failed:', error);
+    // Optionally handle error message here
+  } finally {
+    clearStorage();
+  }
+
+  return { success: true };
+},
 
   // Forgot password
   forgotPassword: async (email) => {
