@@ -6,6 +6,7 @@ const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const authService = require('@services/authService');
 const ResponseHandler = require('@utils/responseHandler');
+const adminService = require('@services/adminService');
 
 class AdminController {
   // Admin login (reuses auth service but checks role)
@@ -22,6 +23,19 @@ class AdminController {
       return ResponseHandler.success(res, result, 'Admin login successful');
     } catch (error) {
       return ResponseHandler.unauthorized(res, error.message);
+    }
+  }
+
+    // Add to adminController.js
+  async getBranchesByTenant(req, res) {
+    try {
+      const { tenantId } = req.params;
+      const branches = await adminService.getBranchesByTenant(tenantId);
+    
+      return ResponseHandler.success(res, branches, 'Branches fetched successfully');
+    } catch (error) {
+      console.error('Error in getBranchesByTenant:', error);
+      return ResponseHandler.internalServerError(res, error.message);
     }
   }
 
@@ -279,6 +293,8 @@ class AdminController {
     }
   }
 
+
+
   // Get all tenants (for user creation dropdown)
   async getAllTenants(req, res) {
     try {
@@ -295,5 +311,7 @@ class AdminController {
     }
   }
 }
+
+
 
 module.exports = new AdminController();

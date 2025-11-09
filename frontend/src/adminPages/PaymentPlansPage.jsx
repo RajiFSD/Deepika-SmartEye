@@ -162,7 +162,6 @@ function PaymentPlansPage() {
       const response = await planService.getPlanStats();
       
       const statsData = response.data || {};
-      //console.log('✅ Plan stats fetched:', statsData);
       setStats({
         totalRevenue: statsData.totalRevenue || 0,
         activeSubscriptions: statsData.activeSubscriptions || 0,

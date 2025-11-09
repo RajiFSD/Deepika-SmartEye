@@ -25,10 +25,11 @@ function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
+  const tenantId = localStorage.getItem('tenantId') || null;
 
   useEffect(() => {
     // Get current user from localStorage
-    const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
+    const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}'); 
     setCurrentUser(adminUser);
     console.log('👤 Current user role:', adminUser.role);
     loadDashboardData(adminUser);
@@ -40,9 +41,8 @@ function AdminDashboardPage() {
       setError('');
 
       const userRole = user?.role || user?.role_details?.role_name;
-      const isSuperAdmin = userRole === 'super_admin';
-      
-      console.log('🔐 Loading dashboard for role:', userRole, 'Is Super Admin:', isSuperAdmin);
+      const isSuperAdmin = userRole === 'super_admin';    
+   
 
       // Build data loading promises based on role
       const dataPromises = [];
@@ -50,18 +50,18 @@ function AdminDashboardPage() {
 
       // Super admin can see everything
       if (isSuperAdmin) {
-        dataPromises.push(
-          adminService.getUsers({ limit: 1000 }),
+        dataPromises.push(        
+          adminService.getUsersByTenantId(tenantId),
           tenantService.getAllTenants({ limit: 1000 }),
-          branchService.getBranches({ limit: 1000 }),
-          cameraService.getCameras({ limit: 1000 })
+          branchService.getBranches({ limit: 1000 }),         
+          cameraService.getCamerasByTenant(tenantId, { limit: 1000 }),
         );
         dataKeys.push('users', 'tenants', 'branches', 'cameras');
       } else {
         // Regular admin can only see branches and cameras
         dataPromises.push(
-          branchService.getBranches({ limit: 1000 }),
-          cameraService.getCameras({ limit: 1000 })
+          branchService.getBranches({ limit: 1000 }),      
+          cameraService.getCamerasByTenant(tenantId, { limit: 1000 }),
         );
         dataKeys.push('branches', 'cameras');
       }
@@ -75,17 +75,10 @@ function AdminDashboardPage() {
       });
 
       // Extract data with fallbacks
-      const userList = dataMap.users?.data || [];
+      const userList = dataMap.users?.data?.users || [];
       const tenantList = dataMap.tenants?.data?.tenants || [];
       const branchList = dataMap.branches?.data?.branches || [];
       const cameraList = dataMap.cameras?.data?.cameras || [];
-
-      // console.log('📊 Data loaded:', {
-      //   users: userList.length,
-      //   tenants: tenantList.length,
-      //   branches: branchList.length,
-      //   cameras: cameraList.length
-      // });
 
       // Update stats based on role
       if (isSuperAdmin) {

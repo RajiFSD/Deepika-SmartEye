@@ -7,8 +7,6 @@ const zoneService = {
     try {
       const { page = 1, limit = 10, search = '', isActive = '', cameraId = '', tenantId = '' } = params;
       
-      console.log('🔵 Fetching zones from:', api.defaults.baseURL + '/zones');
-      
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
@@ -20,10 +18,7 @@ const zoneService = {
       console.log('🔵 Query Params:', queryParams.toString());
       
       const response = await api.get(`/zones?${queryParams}`);
-      
-      console.log('✅ Full Response Object:', response);
-      console.log('✅ Response Data:', response.data);
-      console.log('✅ Response Status:', response.status);
+ 
       
       return response.data;
     } catch (error) {
@@ -38,13 +33,8 @@ const zoneService = {
 
   // Get single zone by ID
   getZoneById: async (zoneId) => {
-    try {
-      console.log('🔵 Fetching zone:', zoneId);
-      
-      const response = await api.get(`/zones/${zoneId}`);
-      
-      console.log('✅ Zone fetched:', response.data);
-      
+    try {      
+      const response = await api.get(`/zones/${zoneId}`);   
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching zone:', error);
@@ -57,18 +47,13 @@ const zoneService = {
     try {
       const { page = 1, limit = 10, isActive = '' } = params;
       
-      console.log('🔵 Fetching zones for camera:', cameraId);
-      
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
         ...(isActive !== '' && { is_active: isActive }),
       });
       
-      const response = await api.get(`/zones/camera/${cameraId}?${queryParams}`);
-      
-      console.log('✅ Zones by camera fetched:', response.data);
-      
+      const response = await api.get(`/zones/camera/${cameraId}?${queryParams}`);  
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching zones by camera:', error);
@@ -81,8 +66,6 @@ const zoneService = {
     try {
       const { page = 1, limit = 10, isActive = '' } = params;
       
-      console.log('🔵 Fetching zones for tenant:', tenantId);
-      
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
@@ -90,10 +73,7 @@ const zoneService = {
       });
       
       const response = await api.get(`/zones/tenant/${tenantId}?${queryParams}`);
-      
-      console.log('✅ Zones by tenant fetched:', response.data);
-      
-      return response.data;
+       return response.data;
     } catch (error) {
       console.error('❌ Error fetching zones by tenant:', error);
       throw error.response?.data?.message || error.message || 'Failed to fetch zones by tenant';
@@ -102,15 +82,10 @@ const zoneService = {
 
   // Get active zones (for dropdowns)
   getActiveZones: async () => {
-    try {
-      console.log('🔵 Fetching active zones');
-      
-      const response = await api.get('/zones', {
+    try {      
+       const response = await api.get('/zones', {
         params: { is_active: true, limit: 100 }
-      });
-      
-      console.log('✅ Active zones fetched:', response.data);
-      
+      });      
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching active zones:', error);
@@ -121,10 +96,7 @@ const zoneService = {
   // Create new zone
   createZone: async (zoneData) => {
     try {
-      console.log('🔵 Creating zone:', zoneData);
-      
       const response = await api.post('/zones', zoneData);
-      
       console.log('✅ Zone created:', response.data);
       
       return response.data;
@@ -137,13 +109,9 @@ const zoneService = {
 
   // Update zone
   updateZone: async (zoneId, zoneData) => {
-    try {
-      console.log('🔵 Updating zone:', zoneId, zoneData);
+    try {  
       
-      const response = await api.put(`/zones/${zoneId}`, zoneData);
-      
-      console.log('✅ Zone updated:', response.data);
-      
+      const response = await api.put(`/zones/${zoneId}`, zoneData);   
       return response.data;
     } catch (error) {
       console.error('❌ Error updating zone:', error);
@@ -154,13 +122,8 @@ const zoneService = {
 
   // Delete zone (soft delete)
   deleteZone: async (zoneId) => {
-    try {
-      console.log('🔵 Deleting zone:', zoneId);
-      
-      const response = await api.delete(`/zones/${zoneId}`);
-      
-      console.log('✅ Zone deleted:', response.data);
-      
+    try { 
+      const response = await api.delete(`/zones/${zoneId}`);      
       return response.data;
     } catch (error) {
       console.error('❌ Error deleting zone:', error);
@@ -170,13 +133,8 @@ const zoneService = {
 
   // Update zone status
   updateZoneStatus: async (zoneId, isActive) => {
-    try {
-      console.log('🔵 Updating zone status:', zoneId, isActive);
-      
-      const response = await api.put(`/zones/${zoneId}/status`, { is_active: isActive });
-      
-      console.log('✅ Zone status updated:', response.data);
-      
+    try {      
+      const response = await api.put(`/zones/${zoneId}/status`, { is_active: isActive });      
       return response.data;
     } catch (error) {
       console.error('❌ Error updating zone status:', error);
@@ -186,8 +144,7 @@ const zoneService = {
 
   // Validate zone polygon
   validateZonePolygon: async (polygonData) => {
-    try {
-      console.log('🔵 Validating zone polygon:', polygonData);
+    try {    
       
       // This would typically call a backend validation endpoint
       // For now, we'll do basic client-side validation
@@ -206,8 +163,7 @@ const zoneService = {
         }
       });
 
-      console.log('✅ Zone polygon validated successfully');
-      
+  
       return { valid: true, message: 'Zone polygon is valid' };
     } catch (error) {
       console.error('❌ Error validating zone polygon:', error);
@@ -218,13 +174,10 @@ const zoneService = {
   // Get zone occupancy statistics
   getZoneOccupancy: async (zoneId) => {
     try {
-      console.log('🔵 Fetching zone occupancy:', zoneId);
       
       // This endpoint would need to be implemented in your backend
       const response = await api.get(`/zones/${zoneId}/occupancy`);
-      
-      console.log('✅ Zone occupancy fetched:', response.data);
-      
+
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching zone occupancy:', error);
@@ -235,13 +188,10 @@ const zoneService = {
   // Get zone statistics
   getZoneStats: async (zoneId) => {
     try {
-      console.log('🔵 Fetching zone stats:', zoneId);
       
       // This would be a custom endpoint for zone-specific statistics
-      const response = await api.get(`/zones/${zoneId}/stats`);
-      
-      console.log('✅ Zone stats fetched:', response.data);
-      
+      const response = await api.get(`/zones/${zoneId}/stats`);   
+ 
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching zone stats:', error);

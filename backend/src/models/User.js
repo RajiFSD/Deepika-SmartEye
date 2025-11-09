@@ -13,6 +13,17 @@ const User = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    branch_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'branches',
+        key: 'branch_id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'SET NULL',
+      comment: 'Branch association for the user'
+    },
     username: {
       type: DataTypes.STRING(100),
       allowNull: false,
@@ -31,7 +42,6 @@ const User = sequelize.define(
       type: DataTypes.STRING(255),
       allowNull: true,
     },
-    // ✅ FIXED: Changed from ENUM to INTEGER to match database schema
     role_id: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -75,11 +85,15 @@ const User = sequelize.define(
         name: "fk_users_role_id",
         fields: ["role_id"],
       },
+      {
+        name: "idx_user_branch_id",
+        fields: ["branch_id"],
+      },
     ],
   }
 );
 
-// ✅ Instance method to get role information
+// Instance methods
 User.prototype.getRoleInfo = async function () {
   const RolePlugin = require('./RolePlugin');
   if (!this.role_id) return null;
@@ -88,7 +102,6 @@ User.prototype.getRoleInfo = async function () {
   return role ? role.toPermissionObject() : null;
 };
 
-// ✅ Instance method to check if user has access to a screen
 User.prototype.hasAccessTo = async function (screenName) {
   const RolePlugin = require('./RolePlugin');
   if (!this.role_id) return false;
@@ -97,11 +110,11 @@ User.prototype.hasAccessTo = async function (screenName) {
   return role ? role.hasAccessTo(screenName) : false;
 };
 
-// ✅ Safe user object (without password)
 User.prototype.toSafeObject = function () {
   return {
     user_id: this.user_id,
     tenant_id: this.tenant_id,
+    branch_id: this.branch_id,
     username: this.username,
     email: this.email,
     full_name: this.full_name,

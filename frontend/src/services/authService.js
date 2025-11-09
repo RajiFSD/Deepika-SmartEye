@@ -6,16 +6,18 @@ const authService = {
     try {
       console.log('🔵 Attempting login to:', api.defaults.baseURL + '/auth/login');
             
-      const response = await api.post('/auth/login', { email, password });
-      
-      console.log('✅ Login response:', response.data);
-      
-      const { user, token, refreshToken } = response.data.data;
+      const response = await api.post('/auth/login', { email, password });      
+            
+      const { user, token, refreshToken } = response.data.data;      
       
       // Store tokens and user data
       localStorage.setItem('authToken', token);
       localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
+     
+      const tenantData =  user.tenant.tenant_id;
+     
+      localStorage.setItem('tenantId', tenantData); 
 
      // const roleresponse = await api.post()
       
@@ -85,8 +87,7 @@ const authService = {
 
   // Get current user
   getCurrentUser: () => {
-    const userStr = localStorage.getItem('user'); 
-    console.log('Current user from localStorage:', userStr);  
+    const userStr = localStorage.getItem('user');  
     return userStr ? JSON.parse(userStr) : null;
   },
 

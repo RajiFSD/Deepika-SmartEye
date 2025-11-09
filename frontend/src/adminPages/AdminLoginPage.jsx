@@ -23,9 +23,7 @@ function AdminLoginPage({ setIsAdminAuth }) {
 
        const response = await authService.login(email, password);
       
-      const data = response;
-
-     console.log('User role_id:', data.data.user.role);
+      const data = response;   
       // Check if user has admin privileges
       if (data.data.user.role !== 'super_admin' && data.data.user.role !== 'admin') {
         throw new Error('Access denied. Admin privileges required.');

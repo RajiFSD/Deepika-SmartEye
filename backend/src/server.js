@@ -158,7 +158,7 @@ class Server {
     this.app.use('/api/admin', adminRoutes);  
     this.app.use('/api/camera', cameraStreamRoutes);
     this.app.use('/api/plans', planRoutes);
-    this.app.use('/api/object-counting-jobs', ObjectCountingJobRoutes);
+    this.app.use('/api/object-counting', ObjectCountingJobRoutes);
     this.app.use('/api/role-plugins', rolePluginRoutes);
     
     // Health check

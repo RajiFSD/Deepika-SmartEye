@@ -9,9 +9,9 @@ function AdminWrapper({ setIsAdminAuth }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
-  //console.log('Admin User from localStorage:', adminUser);
+  
   const userRole = adminUser?.role || 'viewer';
-  //console.log('Admin User Role:', userRole);
+  
 
   const handleLogout = () => {
     localStorage.removeItem('adminToken');

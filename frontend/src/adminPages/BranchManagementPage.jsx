@@ -55,13 +55,11 @@ function BranchManagementPage() {
         page: pagination.page,
         limit: pagination.limit,
       });
-       
       // Handle backend response format - response.data contains the backend's data wrapper
       const responseData = response.data || {};
       const branchesData = responseData.branches || responseData.rows || [];
-      const paginationData = responseData.pagination || {};
-      
-     
+      const paginationData = responseData.pagination || {};      
+    
       setBranches(branchesData);
       setPagination(prev => ({
         ...prev,

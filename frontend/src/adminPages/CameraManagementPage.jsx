@@ -31,6 +31,8 @@ function CameraManagementPage() {
   });
 
   const user = authService.getCurrentUser();
+   const tenantId = localStorage.getItem('tenantId') || null;
+
 
   // Load initial data
   useEffect(() => {
@@ -43,11 +45,7 @@ function CameraManagementPage() {
       setLoading(true);
       setError('');
       
-      const response = await cameraService.getCameras({
-        page: pagination.page,
-        limit: pagination.limit,
-      });
-      
+      const response = await cameraService.getCamerasByTenant(tenantId, { limit: 1000 });      
       
       // ✅ Handle different response formats
       let camerasData = [];

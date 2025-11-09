@@ -1,6 +1,6 @@
 /**
- * Object Counting Service
- * Handles business logic for object detection and counting
+ * Object Counting Service with Image Capture
+ * Handles business logic for object detection, counting, and image capture
  */
 const { spawn } = require('child_process');
 const path = require('path');
@@ -12,19 +12,28 @@ const { Op } = require('sequelize');
 
 class ObjectCountingService {
   constructor() {
-    this.activeProcesses = new Map();   
-    this.pythonScript = path.join(__dirname, '../../../ai-module/src/models/object_counter.py');
-    this.resultsDir = path.join(__dirname, '../uploads/object-counting/results');
-     console.log('🔍 Python script path:', this.pythonScript);
-    console.log('🔍 Python script exists:', fsSync.existsSync(this.pythonScript));
+   this.activeProcesses = new Map();   
+  
+  // Fix the path - adjust based on your actual structure
+  //this.pythonScript = path.join(__dirname, '../../../../ai-module/src/models/object_counter.py');
+   //this.pythonScript = path.resolve('D:\\Web APP\\ai-module\\src\\models\\object_counter.py');
+  // OR use absolute path for now:
+  this.pythonScript = 'D:\\Web APP\\Smarteye\\ai-module\\src\\models\\object_counter.py';
+  
+  this.resultsDir = path.join(__dirname, '../uploads/object-counting/results');
+  this.imagesDir = path.join(__dirname, '../uploads/object-counting/images');
+  
+  console.log('📁 Python script path:', this.pythonScript);
+  console.log('📁 Python script exists:', fsSync.existsSync(this.pythonScript));
 
-    this.ensureDirectories();
+  this.ensureDirectories();
   }
 
   async ensureDirectories() {
     const dirs = [
       path.join(__dirname, '../uploads/object-counting'),
       this.resultsDir,
+      this.imagesDir,
       path.join(__dirname, '../uploads/object-counting/temp')
     ];
     
@@ -46,7 +55,7 @@ class ObjectCountingService {
         branch_id: jobData.branchId,
         zone_id: jobData.zoneId,
         camera_id: jobData.cameraId,
-        source_type: jobData.source, // 'upload' or 'stream'
+        source_type: jobData.source,
         file_name: jobData.fileName,
         file_path: jobData.filePath,
         file_size: jobData.fileSize,
@@ -57,7 +66,9 @@ class ObjectCountingService {
         progress: 0,
         metadata: {
           camera_name: jobData.cameraName,
-          uploaded_at: new Date().toISOString()
+          uploaded_at: new Date().toISOString(),
+          capture_images: jobData.captureImages !== false,
+          image_output_dir: this.getJobImageDir(jobData.jobId || uuidv4())
         }
       });
 
@@ -66,6 +77,13 @@ class ObjectCountingService {
       console.error('Create job error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get image directory for a job
+   */
+  getJobImageDir(jobId) {
+    return path.join(this.imagesDir, jobId);
   }
 
   /**
@@ -89,6 +107,7 @@ class ObjectCountingService {
    */
   async getJobs(filters = {}, options = {}) {
     try {
+      console.log('Filters:', filters);
       const where = {};
       
       if (filters.userId) where.user_id = filters.userId;
@@ -102,7 +121,7 @@ class ObjectCountingService {
         offset: options.offset || 0,
         order: [['created_at', 'DESC']]
       });
-
+console.log(`Found ${jobs.count} jobs matching filters`);
       return {
         count: jobs.count,
         rows: jobs.rows.map(job => this.formatJob(job))
@@ -132,8 +151,9 @@ class ObjectCountingService {
 
       const videoSource = job.file_path || job.stream_url;
       const outputPath = path.join(this.resultsDir, `${jobId}_output.mp4`);
+      const imageOutputDir = this.getJobImageDir(jobId);
 
-      const results = await this.runPythonCounter(videoSource, jobId, outputPath, job);
+      const results = await this.runPythonCounter(videoSource, jobId, outputPath, imageOutputDir, job);
 
       // Update job with results
       await job.update({
@@ -142,11 +162,16 @@ class ObjectCountingService {
         completed_at: new Date(),
         results: {
           ...results,
-          outputVideoPath: outputPath
+          outputVideoPath: outputPath,
+          imageOutputDirectory: imageOutputDir
         },
         total_count: results.total_counted,
         frames_processed: results.frames_processed,
-        processing_time: results.processing_time
+        processing_time: results.processing_time,
+        metadata: {
+          ...job.metadata,
+          images_captured: results.images_captured
+        }
       });
 
       return this.formatJob(job);
@@ -162,9 +187,9 @@ class ObjectCountingService {
   }
 
   /**
-   * Run Python object counter script
+   * Run Python object counter script with image capture
    */
-  runPythonCounter(videoSource, jobId, outputPath, job) {
+  runPythonCounter(videoSource, jobId, outputPath, imageOutputDir, job) {
     return new Promise((resolve, reject) => {
       if (!fsSync.existsSync(this.pythonScript)) {
         reject(new Error('Python script not found: ' + this.pythonScript));
@@ -173,10 +198,20 @@ class ObjectCountingService {
 
       const args = [this.pythonScript, videoSource, outputPath];
       
-      // Add model type if specified
+      // Add model type
       if (job.model_type) {
         args.push('--model', job.model_type);
       }
+
+      // Add image capture settings
+      const captureImages = job.metadata?.capture_images !== false;
+      if (captureImages) {
+        args.push('--images', imageOutputDir);
+      } else {
+        args.push('--no-images');
+      }
+
+      console.log('🐍 Running Python with args:', args);
 
       const pythonProcess = spawn('python', args);
       this.activeProcesses.set(jobId, pythonProcess);
@@ -190,7 +225,7 @@ class ObjectCountingService {
         stdout += output;
         console.log(`[Job ${jobId}] ${output}`);
 
-        // Parse progress from output
+        // Parse progress
         const progressMatch = output.match(/Progress.*?(\d+\.?\d*)%/);
         if (progressMatch) {
           const progress = Math.min(95, parseInt(progressMatch[1]));
@@ -200,11 +235,30 @@ class ObjectCountingService {
           }
         }
 
-        // Update metadata with logs
-        const metadata = job.metadata || {};
-        metadata.logs = metadata.logs || [];
-        metadata.logs.push(output);
-        await job.update({ metadata });
+        // Update metadata with logs - ensure metadata is an object
+        try {
+          let metadata = job.metadata;
+          
+          // If metadata is a string, parse it
+          if (typeof metadata === 'string') {
+            metadata = JSON.parse(metadata);
+          }
+          
+          // If metadata is null/undefined, create new object
+          if (!metadata || typeof metadata !== 'object') {
+            metadata = {};
+          }
+          
+          // Initialize logs array if it doesn't exist
+          if (!Array.isArray(metadata.logs)) {
+            metadata.logs = [];
+          }
+          
+          metadata.logs.push(output);
+          await job.update({ metadata });
+        } catch (err) {
+          console.error('Error updating metadata:', err);
+        }
       });
 
       pythonProcess.stderr.on('data', (data) => {
@@ -218,10 +272,16 @@ class ObjectCountingService {
 
         if (code === 0) {
           try {
-            // Parse the last JSON output from Python
             const lines = stdout.trim().split('\n');
             const lastLine = lines[lines.length - 1];
             const results = JSON.parse(lastLine);
+            
+            console.log(`✅ Job ${jobId} completed:`, {
+              counted: results.total_counted,
+              images: results.images_captured,
+              frames: results.frames_processed
+            });
+            
             resolve(results);
           } catch (err) {
             reject(new Error(`Failed to parse Python output: ${err.message}\nOutput: ${stdout}`));
@@ -270,19 +330,54 @@ class ObjectCountingService {
 
     // Delete associated files
     try {
+      // Delete uploaded video
       if (job.file_path && fsSync.existsSync(job.file_path)) {
         await fs.unlink(job.file_path);
       }
       
+      // Delete output video
       const outputPath = job.results?.outputVideoPath;
       if (outputPath && fsSync.existsSync(outputPath)) {
         await fs.unlink(outputPath);
+      }
+
+      // Delete captured images directory
+      const imageDir = this.getJobImageDir(jobId);
+      if (fsSync.existsSync(imageDir)) {
+        await fs.rm(imageDir, { recursive: true, force: true });
       }
     } catch (err) {
       console.error('Error deleting files:', err);
     }
 
     await job.destroy();
+  }
+
+  /**
+   * Get images for a job
+   */
+  async getJobImages(jobId) {
+    try {
+      const imageDir = this.getJobImageDir(jobId);
+      
+      if (!fsSync.existsSync(imageDir)) {
+        return [];
+      }
+
+      const files = await fs.readdir(imageDir);
+      const images = files
+        .filter(file => /\.(jpg|jpeg|png)$/i.test(file))
+        .map(file => ({
+          filename: file,
+          path: path.join(imageDir, file),
+          url: `/object-counting/job/${jobId}/image/${file}`
+        }));
+
+      return images;
+    } catch (error) {
+      console.error('Error getting job images:', error);
+      return [];
+    }
   }
 
   /**
@@ -309,6 +404,7 @@ class ObjectCountingService {
         failed: jobs.filter(j => j.status === 'failed').length,
         total_objects_counted: jobs.reduce((sum, j) => sum + (j.total_count || 0), 0),
         total_frames_processed: jobs.reduce((sum, j) => sum + (j.frames_processed || 0), 0),
+        total_images_captured: jobs.reduce((sum, j) => sum + (j.metadata?.images_captured || 0), 0),
         average_processing_time: 0
       };
 
@@ -354,7 +450,8 @@ class ObjectCountingService {
             source: 'object_counting_job',
             job_id: jobId,
             bbox: detection.position,
-            class: detection.class
+            class: detection.class,
+            captured_image: detection.captured_image?.path
           }
         });
         savedRecords.push(record);
@@ -397,7 +494,9 @@ class ObjectCountingService {
       metadata: jobData.metadata,
       uploadedAt: jobData.created_at,
       startedAt: jobData.started_at,
-      completedAt: jobData.completed_at
+      completedAt: jobData.completed_at,
+      imagesCaptured: jobData.metadata?.images_captured || 0,
+      imageOutputDir: jobData.results?.imageOutputDirectory
     };
   }
 

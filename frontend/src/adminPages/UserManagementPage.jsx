@@ -18,6 +18,7 @@ function UserManagementPage({ setIsAdminAuth }) {
   const [filterRole, setFilterRole] = useState('all');
   const [deletingUser, setDeletingUser] = useState(null);
   const token = localStorage.getItem('adminToken');
+  const tenantId = localStorage.getItem('tenantId') || null;
   const navigate = useNavigate();
 
   const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
@@ -29,8 +30,8 @@ function UserManagementPage({ setIsAdminAuth }) {
 
   const loadUsers = async () => {
     try {      
-      const usersData = await adminService.getUsers({ limit: 1000 });      
-      const data = usersData.data;
+      const usersData = await adminService.getUsersByTenantId(tenantId,{ limit: 1000 });      
+      const data = usersData.data.users;
       setUsers(data);
     } catch (error) {
       console.error('Error loading users:', error);
@@ -212,25 +213,30 @@ function UserManagementPage({ setIsAdminAuth }) {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredUsers.map((user) => (
                 <tr key={user.user_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
-                      <div className="text-sm text-gray-500">{user.email}</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      user.role === 'super_admin' ? 'bg-red-100 text-red-800' :
-                      user.role === 'admin' ? 'bg-blue-100 text-blue-800' :
-                      user.role === 'manager' ? 'bg-green-100 text-green-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {user.tenant?.tenant_name || 'N/A'}
-                  </td>
+  <td className="px-6 py-4 whitespace-nowrap">
+    <div>
+      <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
+      <div className="text-sm text-gray-500">{user.email}</div>
+    </div>
+  </td>
+  <td className="px-6 py-4 whitespace-nowrap">
+    <span className={`px-2 py-1 text-xs rounded-full ${
+      user.role === 'super_admin' ? 'bg-red-100 text-red-800' :
+      user.role === 'admin' ? 'bg-blue-100 text-blue-800' :
+      user.role === 'manager' ? 'bg-green-100 text-green-800' :
+      'bg-gray-100 text-gray-800'
+    }`}>
+      {user.role}
+    </span>
+  </td>
+  <td className="px-6 py-4 whitespace-nowrap">
+    <div>
+      <div className="text-sm text-gray-900">{user.tenant?.tenant_name || 'N/A'}</div>
+      {user.branch && (
+        <div className="text-xs text-gray-500">{user.branch.branch_name}</div>
+      )}
+    </div>
+  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs rounded-full ${
                       user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'

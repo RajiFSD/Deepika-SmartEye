@@ -4,30 +4,58 @@ const ResponseHandler = require('@utils/responseHandler');
 /**
  * Middleware to authenticate JWT token
  */
+// const authenticateToken = (req, res, next) => {
+//   try {
+//     const authHeader = req.headers['authorization'];
+//     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+//     if (!token) {
+//       return ResponseHandler.unauthorized(res, 'Access token required');
+//     }
+
+//     jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+//       if (err) {
+//         console.error('JWT verification error:', err.message);
+//         return ResponseHandler.unauthorized(res, 'Invalid or expired token');
+//       }
+
+//       // ✅ Attach decoded token data to request
+//       req.user = decoded;
+//       console.log('✅ Authenticated user:', decoded.email, 'Role:', decoded.role);
+//       next();
+//     });
+//   } catch (error) {
+//     console.error('Authentication error:', error);
+//     return ResponseHandler.unauthorized(res, 'Authentication failed');
+//   }
+// };
+
 const authenticateToken = (req, res, next) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-    if (!token) {
-      return ResponseHandler.unauthorized(res, 'Access token required');
-    }
+  // 🔍 Add debugging
+  console.log('🔐 Auth Debug:', {
+    hasAuthHeader: !!authHeader,
+    hasToken: !!token,
+    tokenPreview: token ? token.substring(0, 20) + '...' : 'none'
+  });
 
-    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-      if (err) {
-        console.error('JWT verification error:', err.message);
-        return ResponseHandler.unauthorized(res, 'Invalid or expired token');
-      }
-
-      // ✅ Attach decoded token data to request
-      req.user = decoded;
-      console.log('✅ Authenticated user:', decoded.email, 'Role:', decoded.role);
-      next();
-    });
-  } catch (error) {
-    console.error('Authentication error:', error);
-    return ResponseHandler.unauthorized(res, 'Authentication failed');
+  if (!token) {
+    console.log('❌ No token provided');
+    return res.status(401).json({ message: 'Access token required' });
   }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      console.log('❌ Token verification failed:', err.message);
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    
+    console.log('✅ Token verified for user:', user.userId);
+    req.user = user;
+    next();
+  });
 };
 
 /**

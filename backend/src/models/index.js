@@ -24,7 +24,8 @@ console.log('📦 Verifying models loaded:', {
   User: !!User,
   RolePlugin: !!RolePlugin,
   Branch: !!Branch,
-  Camera: !!Camera
+  Camera: !!Camera,
+  ObjectCountingJob: !!ObjectCountingJob
 });
 
 const models = {
@@ -80,6 +81,8 @@ User.belongsTo(Tenant, { foreignKey: "tenant_id", as: "tenant" });
 User.belongsTo(RolePlugin, { foreignKey: "role_id", as: "role" }); // ✅ CRITICAL
 User.hasMany(ZoneConfig, { foreignKey: "created_by", as: "createdZones" });
 User.hasMany(PluginJob, { foreignKey: "user_id", as: "pluginJobs" });
+User.hasMany(ObjectCountingJob, { foreignKey: "user_id", as: "objectCountingJobs" });
+User.belongsTo(Branch, { foreignKey: 'branch_id', as: 'branch' });
 
 // ============================================
 // Branch Associations
@@ -88,6 +91,8 @@ Branch.belongsTo(Tenant, { foreignKey: "tenant_id", as: "tenant" });
 Branch.hasMany(Camera, { foreignKey: "branch_id", as: "cameras" });
 Branch.hasMany(PeopleCountLog, { foreignKey: "branch_id", as: "peopleCountLogs" });
 Branch.hasMany(CurrentOccupancy, { foreignKey: "branch_id", as: "currentOccupancies" });
+Branch.hasMany(ObjectCountingJob, { foreignKey: "branch_id", as: "objectCountingJobs" });
+Branch.hasMany(User, { foreignKey: 'branch_id', as: 'users' });
 
 // ============================================
 // Camera Associations
@@ -101,6 +106,7 @@ Camera.hasMany(PeopleCountLog, { foreignKey: "camera_id", as: "peopleCountLogs" 
 Camera.hasMany(CurrentOccupancy, { foreignKey: "camera_id", as: "currentOccupancies" });
 Camera.hasMany(PluginJob, { foreignKey: "camera_id", as: "pluginJobs" });
 Camera.hasMany(DetectionAccuracy, { foreignKey: "camera_id", as: "detectionAccuracies" });
+Camera.hasMany(ObjectCountingJob, { foreignKey: "camera_id", as: "objectCountingJobs" });
 
 // ============================================
 // ZoneConfig Associations
@@ -111,6 +117,7 @@ ZoneConfig.belongsTo(User, { foreignKey: "created_by", as: "creator" });
 ZoneConfig.hasMany(AlertThreshold, { foreignKey: "zone_id", as: "alertThresholds" });
 ZoneConfig.hasMany(PeopleCountLog, { foreignKey: "zone_id", as: "peopleCountLogs" });
 ZoneConfig.hasMany(CurrentOccupancy, { foreignKey: "zone_id", as: "currentOccupancies" });
+ZoneConfig.hasMany(ObjectCountingJob, { foreignKey: "zone_id", as: "objectCountingJobs" });
 
 // ============================================
 // AlertThreshold Associations
@@ -155,6 +162,37 @@ PluginJob.belongsTo(Camera, { foreignKey: "camera_id", as: "camera" });
 // ============================================
 DetectionAccuracy.belongsTo(Camera, { foreignKey: "camera_id", as: "camera" });
 DetectionAccuracy.belongsTo(Tenant, { foreignKey: "tenant_id", as: "tenant" });
+
+// ============================================
+// ObjectCountingJob Associations
+// ============================================
+ObjectCountingJob.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'user',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+ObjectCountingJob.belongsTo(Branch, {
+  foreignKey: 'branch_id',
+  as: 'branch',
+  onDelete: 'SET NULL',
+  onUpdate: 'CASCADE'
+});
+
+ObjectCountingJob.belongsTo(ZoneConfig, {
+  foreignKey: 'zone_id',
+  as: 'zone',
+  onDelete: 'SET NULL',
+  onUpdate: 'CASCADE'
+});
+
+ObjectCountingJob.belongsTo(Camera, {
+  foreignKey: 'camera_id',
+  as: 'camera',
+  onDelete: 'SET NULL',
+  onUpdate: 'CASCADE'
+});
 
 // ============================================
 // Plan and PlanFeature Associations
