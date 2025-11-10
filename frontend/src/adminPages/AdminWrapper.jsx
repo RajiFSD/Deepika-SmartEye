@@ -1,15 +1,34 @@
+import axios from 'axios';
+import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Users, LogOut, Menu, X, Building2, UserSquare2, Camera, Shield, LayoutDashboard } from 'lucide-react';
-import { useState } from 'react';
+import {
+  Users,
+  LogOut,
+  Menu,
+  X,
+  Building2,
+  UserSquare2,
+  Camera,
+  Shield,
+  LayoutDashboard,
+} from 'lucide-react';
 
 function AdminWrapper({ setIsAdminAuth }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
-  const userRole = adminUser?.role || 'viewer';
+  // ✅ Initialize user with default role
+  const [user, setUser] = useState(() => {
+    const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
+    const userRole = adminUser?.role || 'viewer';
+    return { ...adminUser, role: userRole };
+  });
 
+  const userRole = user.role || 'viewer';
+  const [menuItems, setMenuItems] = useState([]);
+
+  // ✅ Handle logout
   const handleLogout = () => {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
@@ -17,21 +36,35 @@ function AdminWrapper({ setIsAdminAuth }) {
     navigate('/admin/login');
   };
 
-  // 🎯 Define all possible menu items
-  const allMenuItems = [
-    { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'admin', 'manager', 'viewer'] },
-    { path: '/admin/users', icon: Users, label: 'User Management', roles: ['super_admin', 'admin'] },
-    { path: '/admin/tenants', icon: UserSquare2, label: 'Tenants', roles: ['super_admin'] },
-    { path: '/admin/branches', icon: Building2, label: 'Branches', roles: ['super_admin', 'admin', 'manager'] },
-    { path: '/admin/cameras', icon: Camera, label: 'Cameras', roles: ['super_admin', 'admin', 'manager'] },
-    { path: '/admin/payments', icon: Shield, label: 'Payment Plans', roles: ['super_admin'] },
-    { path: '/admin/subscriptions', icon: Shield, label: 'Subscriptions' }, 
-  ];
+  // ✅ Fetch role-based menu from API
+  useEffect(() => {
+    if (user?.role) {
+      axios
+        .get(`/api/role-plugin?role_name=${user.role}`)
+        .then((res) => {
+          setMenuItems(res.data || []);
+        })
+        .catch((err) => console.error('Error fetching role menu:', err));
+    }
+  }, [user]);
 
-  // 🧩 Filter menu based on role
-  const menuItems = allMenuItems.filter(item => item.roles.includes(userRole));
-
+  // ✅ Active path checker
   const isActive = (path) => location.pathname === path;
+
+  // ✅ Menu item component
+  const MenuItem = ({ label, path, Icon }) => (
+    <button
+      onClick={() => navigate(path)}
+      className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+        isActive(path)
+          ? 'bg-purple-100 text-purple-700'
+          : 'text-gray-700 hover:bg-gray-100'
+      }`}
+    >
+      {Icon && <Icon className="w-5 h-5 mr-3" />}
+      {label}
+    </button>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -58,23 +91,28 @@ function AdminWrapper({ setIsAdminAuth }) {
           {/* Navigation */}
           <nav className="flex-1 px-4 py-4 overflow-y-auto">
             <div className="space-y-1">
-              {menuItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.path}
-                    onClick={() => navigate(item.path)}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
-                      isActive(item.path)
-                        ? 'bg-purple-100 text-purple-700 border-r-4 border-purple-600'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="font-medium text-sm">{item.label}</span>
-                  </button>
-                );
-              })}
+              {menuItems.length > 0 ? (
+                menuItems.map((item) => (
+                  <MenuItem
+                    key={item.screen_name}
+                    label={item.screen_name}
+                    path={item.path || '/admin/dashboard'}
+                    Icon={
+                      item.icon === 'Users'
+                        ? Users
+                        : item.icon === 'Building2'
+                        ? Building2
+                        : item.icon === 'Camera'
+                        ? Camera
+                        : item.icon === 'Shield'
+                        ? Shield
+                        : LayoutDashboard
+                    }
+                  />
+                ))
+              ) : (
+                <p className="text-gray-400 text-sm px-4">No menu available</p>
+              )}
             </div>
           </nav>
 
@@ -83,11 +121,13 @@ function AdminWrapper({ setIsAdminAuth }) {
             <div className="flex items-center gap-3 px-4 py-2 mb-2">
               <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
                 <span className="text-white text-sm font-bold">
-                  {adminUser.full_name?.charAt(0)?.toUpperCase() || 'A'}
+                  {user?.full_name?.charAt(0)?.toUpperCase() || 'A'}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{adminUser.full_name || 'Admin User'}</p>
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {user?.full_name || 'Admin User'}
+                </p>
                 <p className="text-xs text-gray-500 truncate capitalize">{userRole}</p>
               </div>
             </div>
