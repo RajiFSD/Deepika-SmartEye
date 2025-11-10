@@ -34,8 +34,9 @@ class AuthService {
         console.log("❌ User account is deactivated:", email);
         throw new Error("Account is deactivated");
       }
-
+      console.log("Before")
       console.log("✅ User found:", email, "Role ID:", user.role_id);
+      console.log("After")
 
       const isValidPassword = await bcrypt.compare(password, user.password_hash);
       if (!isValidPassword) {

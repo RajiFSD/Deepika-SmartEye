@@ -3,31 +3,38 @@ import api from './api';
 const authService = {
 
   login: async (email, password) => {
-    try {
-      console.log('🔵 Attempting login to:', api.defaults.baseURL + '/auth/login');
-            
-      const response = await api.post('/auth/login', { email, password });      
-            
-      const { user, token, refreshToken } = response.data.data;      
-      
-      // Store tokens and user data
-      localStorage.setItem('authToken', token);
-      localStorage.setItem('refreshToken', refreshToken);
-      localStorage.setItem('user', JSON.stringify(user));
-     
-      const tenantData =  user.tenant.tenant_id;
-     
-      localStorage.setItem('tenantId', tenantData); 
+  try {
+    console.log('🔵 Attempting login to:', api.defaults.baseURL + '/auth/login');
+    
+    // ✅ Clear ALL existing auth data first
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminUser');
+    localStorage.removeItem('tenantId');
+    
+    const response = await api.post('/auth/login', { email, password });      
+    
+    const { user, token, refreshToken } = response.data.data;      
+    
+    // Store tokens and user data
+    localStorage.setItem('authToken', token);
+    localStorage.setItem('refreshToken', refreshToken);
+    localStorage.setItem('user', JSON.stringify(user));
+   
+    const tenantData = user.tenant.tenant_id;
+    localStorage.setItem('tenantId', tenantData); 
 
-     console.log("Login response--",response.data);
-      
-      return response.data;
-    } catch (error) {
-      console.error('❌ Login error:', error);
-      console.error('❌ Error response:', error.response);
-      throw error.response?.data?.message || error.message || 'Login failed';
-    }
-  },
+    console.log("Login response--", response.data);
+    
+    return response.data;
+  } catch (error) {
+    console.error('❌ Login error:', error);
+    console.error('❌ Error response:', error.response);
+    throw error.response?.data?.message || error.message || 'Login failed';
+  }
+},
 
   // Register user
   register: async (userData) => {

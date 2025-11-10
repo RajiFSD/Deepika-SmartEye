@@ -63,7 +63,7 @@ function UserManagementPage({ setIsAdminAuth }) {
   };
 
   const handleLogout = () => {
-    setIsAuthenticated(false);
+    setIsAdminAuth(false);
     authService.logout();
     navigate('/admin/login');
   };
