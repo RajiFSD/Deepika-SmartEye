@@ -6,13 +6,15 @@ const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const authService = require('@services/authService');
 const ResponseHandler = require('@utils/responseHandler');
+const adminService = require('@services/adminService');
 
 class AdminController {
   // Admin login (reuses auth service but checks role)
   async adminLogin(req, res) {
     try {
       const result = await authService.login(req.body);
-      
+      console.log('Admin login attempt for:', result.user.email);
+      console.log('User role:', result.user.role);
       // Check if user has admin privileges
       if (result.user.role !== 'super_admin' && result.user.role !== 'admin') {
         return ResponseHandler.forbidden(res, 'Admin privileges required');
@@ -24,9 +26,23 @@ class AdminController {
     }
   }
 
+    // Add to adminController.js
+  async getBranchesByTenant(req, res) {
+    try {
+      const { tenantId } = req.params;
+      const branches = await adminService.getBranchesByTenant(tenantId);
+    
+      return ResponseHandler.success(res, branches, 'Branches fetched successfully');
+    } catch (error) {
+      console.error('Error in getBranchesByTenant:', error);
+      return ResponseHandler.internalServerError(res, error.message);
+    }
+  }
+
   // Get all users
   async getAllUsers(req, res) {
     try {
+      console.log('Fetching all users with filters:', req.query);
       const { search, role, tenant_id, is_active } = req.query;
       
       const where = {};
@@ -79,6 +95,92 @@ class AdminController {
 
       return ResponseHandler.success(res, user);
     } catch (error) {
+      return ResponseHandler.internalServerError(res, error.message);
+    }
+  }
+  
+  // ✅ NEW: Get user count by tenant ID
+  async getUserCountByTenantId(req, res) {
+    try {
+      const { tenantId } = req.params;
+      
+      console.log('Fetching user count for tenant:', tenantId);
+
+      const count = await User.count({
+        where: { 
+          tenant_id: tenantId,
+          is_active: true // Only count active users
+        }
+      });
+
+      return ResponseHandler.success(res, { 
+        tenant_id: tenantId,
+        user_count: count 
+      });
+    } catch (error) {
+      console.error('Error in getUserCountByTenantId:', error);
+      return ResponseHandler.internalServerError(res, error.message);
+    }
+  }
+
+   // ✅ NEW: Get users by tenant ID
+  async getUsersByTenantId(req, res) {
+    try {
+      const { tenantId } = req.params;
+      const { search, role, is_active, page = 1, limit = 10 } = req.query;
+      
+      console.log('Fetching users for tenant:', tenantId);
+
+      // Verify tenant exists
+      const tenant = await Tenant.findByPk(tenantId);
+      if (!tenant) {
+        return ResponseHandler.notFound(res, 'Tenant not found');
+      }
+
+      const where = { tenant_id: tenantId };
+      if (role) where.role = role;
+      if (is_active !== undefined) where.is_active = is_active === 'true';
+      
+      // Search by name or email
+      if (search) {
+        where[Op.or] = [
+          { full_name: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } },
+          { username: { [Op.like]: `%${search}%` } }
+        ];
+      }
+
+      const offset = (parseInt(page) - 1) * parseInt(limit);
+
+      const { count, rows: users } = await User.findAndCountAll({
+        where,
+        include: [{
+          model: Tenant,
+          as: 'tenant',
+          attributes: ['tenant_id', 'tenant_name', 'tenant_code']
+        }],
+        attributes: { exclude: ['password_hash'] },
+        order: [['created_at', 'DESC']],
+        limit: parseInt(limit),
+        offset: offset
+      });
+
+      return ResponseHandler.success(res, {
+        users,
+        tenant: {
+          tenant_id: tenant.tenant_id,
+          tenant_name: tenant.tenant_name,
+          tenant_code: tenant.tenant_code
+        },
+        pagination: {
+          total: count,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(count / parseInt(limit))
+        }
+      });
+    } catch (error) {
+      console.error('Error in getUsersByTenantId:', error);
       return ResponseHandler.internalServerError(res, error.message);
     }
   }
@@ -191,6 +293,8 @@ class AdminController {
     }
   }
 
+
+
   // Get all tenants (for user creation dropdown)
   async getAllTenants(req, res) {
     try {
@@ -207,5 +311,7 @@ class AdminController {
     }
   }
 }
+
+
 
 module.exports = new AdminController();

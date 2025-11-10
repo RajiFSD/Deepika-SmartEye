@@ -56,6 +56,9 @@ api.interceptors.response.use(
         localStorage.removeItem('authToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('adminUser');
+        localStorage.removeItem('tenantId');
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }

@@ -1,48 +1,48 @@
 import React, { useState, useEffect, useRef } from 'react';
-
-const API_BASE = 'http://localhost:5000/api';
+import ObjectCounterService from '../services/ObjectCounterService';
 
 export default function ObjectCounterPage() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedJob, setSelectedJob] = useState(null);
-  const [activeTab, setActiveTab] = useState('upload'); // 'upload' or 'stream'
+  const [activeTab, setActiveTab] = useState('upload');
+  const [error, setError] = useState(null);
+  const [images, setImages] = useState([]);
   
-  // Upload form
   const [videoFile, setVideoFile] = useState(null);
   const fileInputRef = useRef(null);
   
-  // Stream form
   const [streamForm, setStreamForm] = useState({
-    ip: '192.168.43.100',
-    port: '554',
-    username: 'vtvtraders2024@gmail.com',
-    password: 'admin234',
-    channel: '1',
-    duration: 60
+    camera_id: '',
+    duration: 60,
+    model_type: 'hog',
+    capture_images: true
   });
 
-  // Fetch all jobs
+  /**
+   * Fetch all jobs
+   */
   const fetchJobs = async () => {
     try {
-      const response = await fetch(`${API_BASE}/object-counting/jobs`);
-      const data = await response.json();
+      const data = await ObjectCounterService.fetchJobs();
       if (data.success) {
-        setJobs(data.jobs);
+        setJobs(data.jobs || data.data?.rows || []);
       }
     } catch (error) {
       console.error('Failed to fetch jobs:', error);
+      setError(error.message);
     }
   };
 
-  // Fetch single job
+  /**
+   * Fetch a single job by ID
+   */
   const fetchJob = async (jobId) => {
     try {
-      const response = await fetch(`${API_BASE}/object-counting/job/${jobId}`);
-      const data = await response.json();
+      const data = await ObjectCounterService.fetchJob(jobId);
       if (data.success) {
-        return data.job;
+        return data.job || data.data;
       }
     } catch (error) {
       console.error('Failed to fetch job:', error);
@@ -50,139 +50,160 @@ export default function ObjectCounterPage() {
     return null;
   };
 
-  // Upload video
+  /**
+   * Fetch images for a job
+   */
+  const fetchJobImages = async (jobId) => {
+    try {
+      const data = await ObjectCounterService.fetchJobImages(jobId);
+      console.log('Fetched job images:', data);
+      if (data.success) {
+        setImages(data.images || data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch images:', error);
+    }
+  };
+
+  /**
+   * Handle video upload
+   */
   const handleUpload = async () => {
     if (!videoFile) {
       alert('Please select a video file');
       return;
     }
 
-    const formData = new FormData();
-    formData.append('video', videoFile);
-
     setLoading(true);
     setUploadProgress(0);
+    setError(null);
 
     try {
-      const xhr = new XMLHttpRequest();
-      
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const progress = (e.loaded / e.total) * 100;
-          setUploadProgress(progress);
-        }
-      });
+      const result = await ObjectCounterService.uploadVideo(
+        videoFile,
+        { 
+          model_type: 'hog',
+          capture_images: true 
+        },
+        (progress) => setUploadProgress(progress)
+      );
 
-      xhr.addEventListener('load', () => {
-        if (xhr.status === 200) {
-          const data = JSON.parse(xhr.responseText);
-          if (data.success) {
-            alert('Video uploaded successfully! Processing started.');
-            setVideoFile(null);
-            if (fileInputRef.current) fileInputRef.current.value = '';
-            fetchJobs();
-          }
-        }
-      });
-
-      xhr.open('POST', `${API_BASE}/object-counting/upload`);
-      xhr.send(formData);
+      if (result.success) {
+        alert('Video uploaded successfully! Processing started.');
+        setVideoFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        await fetchJobs();
+      } else {
+        setError(result.message || 'Upload failed');
+      }
     } catch (error) {
-      console.error('Upload failed:', error);
-      alert('Upload failed: ' + error.message);
+      setError(error.message);
     } finally {
       setLoading(false);
       setUploadProgress(0);
     }
   };
 
-  // Start stream processing
+  /**
+   * Handle stream processing start
+   */
   const handleStreamStart = async () => {
-    if (!streamForm.ip) {
-      alert('IP address is required');
+    if (!streamForm.camera_id) {
+      alert('Camera ID is required');
       return;
     }
 
     setLoading(true);
+    setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/object-counting/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(streamForm)
-      });
-
-      const data = await response.json();
+      const result = await ObjectCounterService.startStream(streamForm);
       
-      if (data.success) {
+      if (result.success) {
         alert('Stream processing started!');
-        fetchJobs();
+        await fetchJobs();
       } else {
-        alert('Failed to start stream: ' + data.message);
+        setError(result.message || 'Failed to start stream');
       }
     } catch (error) {
-      console.error('Stream start failed:', error);
-      alert('Failed to start stream: ' + error.message);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Cancel job
+  /**
+   * Cancel a job
+   */
   const handleCancel = async (jobId) => {
     try {
-      const response = await fetch(`${API_BASE}/object-counting/job/${jobId}/cancel`, {
-        method: 'POST'
-      });
-      const data = await response.json();
-      if (data.success) {
-        fetchJobs();
+      const result = await ObjectCounterService.cancelJob(jobId);
+      if (result.success) {
+        await fetchJobs();
       }
     } catch (error) {
       console.error('Cancel failed:', error);
+      setError(error.message);
     }
   };
 
-  // Delete job
+  /**
+   * Delete a job
+   */
   const handleDelete = async (jobId) => {
     if (!confirm('Are you sure you want to delete this job?')) return;
 
     try {
-      const response = await fetch(`${API_BASE}/object-counting/job/${jobId}`, {
-        method: 'DELETE'
-      });
-      const data = await response.json();
-      if (data.success) {
+      const result = await ObjectCounterService.deleteJob(jobId);
+      if (result.success) {
         if (selectedJob?.id === jobId) {
           setSelectedJob(null);
+          setImages([]);
         }
-        fetchJobs();
+        await fetchJobs();
       }
     } catch (error) {
       console.error('Delete failed:', error);
+      setError(error.message);
     }
   };
 
-  // Download results
-  const handleDownload = (jobId, format = 'json') => {
-    const url = `${API_BASE}/object-counting/job/${jobId}/download?format=${format}`;
-    window.open(url, '_blank');
+  /**
+   * Download job results
+   */
+  const handleDownload = async (jobId, format) => {
+    try {
+      console.log('Downloading results for job:', jobId, 'format:', format);
+      await ObjectCounterService.downloadResults(jobId, format);
+    } catch (error) {
+      console.error('Download failed:', error);
+      setError(error.message);
+    }
   };
 
-  // View job details
+  
+
+  /**
+   * View job details
+   */
   const viewJob = async (job) => {
     const updatedJob = await fetchJob(job.id);
     setSelectedJob(updatedJob || job);
+    
+    if ((updatedJob || job)?.status === 'completed') {
+      await fetchJobImages((updatedJob || job).id);
+    }
   };
 
-  // Poll active jobs
+  /**
+   * Auto-refresh jobs
+   */
   useEffect(() => {
     fetchJobs();
     
     const interval = setInterval(() => {
       fetchJobs();
       
-      // Update selected job if it's active
       if (selectedJob && (selectedJob.status === 'processing' || selectedJob.status === 'queued')) {
         fetchJob(selectedJob.id).then(job => {
           if (job) setSelectedJob(job);
@@ -193,6 +214,9 @@ export default function ObjectCounterPage() {
     return () => clearInterval(interval);
   }, [selectedJob]);
 
+  /**
+   * Get status badge color
+   */
   const getStatusColor = (status) => {
     switch (status) {
       case 'completed': return 'text-green-600 bg-green-50 border-green-200';
@@ -210,14 +234,25 @@ export default function ObjectCounterPage() {
       <header className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto max-w-7xl px-4 py-4">
           <h1 className="text-2xl font-bold tracking-tight">Object Counting System</h1>
-          <p className="text-sm text-gray-600">Track and count moving objects in videos and camera streams</p>
+          <p className="text-sm text-gray-600">Track and count moving objects with AI-powered detection</p>
         </div>
       </header>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="mx-auto max-w-7xl px-4 py-2">
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800">
+            <strong>Error:</strong> {error}
+            <button onClick={() => setError(null)} className="ml-4 underline">Dismiss</button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 py-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Left: Input Section */}
+        {/* Left Sidebar - Upload & Jobs List */}
         <section className="lg:col-span-1 space-y-6">
-          {/* Tab Selector */}
+          {/* Upload/Stream Card */}
           <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
             <div className="flex border-b">
               <button
@@ -281,7 +316,7 @@ export default function ObjectCounterPage() {
                 <button
                   onClick={handleUpload}
                   disabled={!videoFile || loading}
-                  className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
                 >
                   {loading ? 'Uploading...' : 'Upload & Process'}
                 </button>
@@ -291,64 +326,31 @@ export default function ObjectCounterPage() {
             {/* Stream Tab */}
             {activeTab === 'stream' && (
               <div className="p-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="col-span-2 text-sm">
-                    <span className="block text-gray-700 mb-1">IP Address</span>
-                    <input
-                      value={streamForm.ip}
-                      onChange={(e) => setStreamForm({ ...streamForm, ip: e.target.value })}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                      placeholder="192.168.1.64"
-                    />
-                  </label>
-                  <label className="text-sm">
-                    <span className="block text-gray-700 mb-1">Port</span>
-                    <input
-                      value={streamForm.port}
-                      onChange={(e) => setStreamForm({ ...streamForm, port: e.target.value })}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="text-sm">
-                    <span className="block text-gray-700 mb-1">Channel</span>
-                    <input
-                      value={streamForm.channel}
-                      onChange={(e) => setStreamForm({ ...streamForm, channel: e.target.value })}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="text-sm">
-                    <span className="block text-gray-700 mb-1">Username</span>
-                    <input
-                      value={streamForm.username}
-                      onChange={(e) => setStreamForm({ ...streamForm, username: e.target.value })}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="text-sm">
-                    <span className="block text-gray-700 mb-1">Password</span>
-                    <input
-                      type="password"
-                      value={streamForm.password}
-                      onChange={(e) => setStreamForm({ ...streamForm, password: e.target.value })}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="col-span-2 text-sm">
-                    <span className="block text-gray-700 mb-1">Duration (seconds)</span>
-                    <input
-                      type="number"
-                      value={streamForm.duration}
-                      onChange={(e) => setStreamForm({ ...streamForm, duration: parseInt(e.target.value) })}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                    />
-                  </label>
-                </div>
+                <label className="text-sm">
+                  <span className="block text-gray-700 mb-1">Camera ID</span>
+                  <input
+                    type="number"
+                    value={streamForm.camera_id}
+                    onChange={(e) => setStreamForm({ ...streamForm, camera_id: e.target.value })}
+                    className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter camera ID"
+                  />
+                </label>
+                
+                <label className="text-sm">
+                  <span className="block text-gray-700 mb-1">Duration (seconds)</span>
+                  <input
+                    type="number"
+                    value={streamForm.duration}
+                    onChange={(e) => setStreamForm({ ...streamForm, duration: parseInt(e.target.value) })}
+                    className="w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                </label>
 
                 <button
                   onClick={handleStreamStart}
-                  disabled={loading}
-                  className="w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+                  disabled={loading || !streamForm.camera_id}
+                  className="w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
                 >
                   {loading ? 'Starting...' : 'Start Stream Processing'}
                 </button>
@@ -364,7 +366,7 @@ export default function ObjectCounterPage() {
               </h2>
               <button
                 onClick={fetchJobs}
-                className="text-xs rounded-md border px-2 py-1 hover:bg-gray-50"
+                className="text-xs rounded-md border px-2 py-1 hover:bg-gray-50 transition"
               >
                 Refresh
               </button>
@@ -413,10 +415,11 @@ export default function ObjectCounterPage() {
           </div>
         </section>
 
-        {/* Right: Results Section */}
+        {/* Right Panel - Job Details */}
         <section className="lg:col-span-2">
           {selectedJob ? (
             <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+              {/* Job Header */}
               <div className="border-b px-4 py-3 bg-gray-50">
                 <div className="flex items-center justify-between">
                   <div>
@@ -427,7 +430,7 @@ export default function ObjectCounterPage() {
                     {selectedJob.status === 'processing' && (
                       <button
                         onClick={() => handleCancel(selectedJob.id)}
-                        className="text-xs rounded-lg border px-3 py-1.5 hover:bg-gray-50"
+                        className="text-xs rounded-lg border px-3 py-1.5 hover:bg-gray-50 transition"
                       >
                         Cancel
                       </button>
@@ -436,13 +439,13 @@ export default function ObjectCounterPage() {
                       <>
                         <button
                           onClick={() => handleDownload(selectedJob.id, 'json')}
-                          className="text-xs rounded-lg bg-blue-600 text-white px-3 py-1.5 hover:bg-blue-500"
+                          className="text-xs rounded-lg bg-blue-600 text-white px-3 py-1.5 hover:bg-blue-500 transition"
                         >
                           Download JSON
                         </button>
                         <button
                           onClick={() => handleDownload(selectedJob.id, 'video')}
-                          className="text-xs rounded-lg bg-green-600 text-white px-3 py-1.5 hover:bg-green-500"
+                          className="text-xs rounded-lg bg-green-600 text-white px-3 py-1.5 hover:bg-green-500 transition"
                         >
                           Download Video
                         </button>
@@ -450,7 +453,7 @@ export default function ObjectCounterPage() {
                     )}
                     <button
                       onClick={() => handleDelete(selectedJob.id)}
-                      className="text-xs rounded-lg border border-red-300 text-red-600 px-3 py-1.5 hover:bg-red-50"
+                      className="text-xs rounded-lg border border-red-300 text-red-600 px-3 py-1.5 hover:bg-red-50 transition"
                     >
                       Delete
                     </button>
@@ -458,8 +461,9 @@ export default function ObjectCounterPage() {
                 </div>
               </div>
 
+              {/* Job Content */}
               <div className="p-4 space-y-4">
-                {/* Status */}
+                {/* Stats Grid */}
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                   <div>
                     <div className="text-xs text-gray-500">Status</div>
@@ -471,21 +475,21 @@ export default function ObjectCounterPage() {
                     <div className="text-xs text-gray-500">Uploaded</div>
                     <div className="text-sm font-medium">{new Date(selectedJob.uploadedAt).toLocaleTimeString()}</div>
                   </div>
-                  {selectedJob.results?.total_counted !== undefined && (
+                  {selectedJob.totalCount !== undefined && (
                     <>
                       <div>
                         <div className="text-xs text-gray-500">Total Count</div>
-                        <div className="text-2xl font-bold text-blue-600">{selectedJob.results.total_counted}</div>
+                        <div className="text-2xl font-bold text-blue-600">{selectedJob.totalCount}</div>
                       </div>
                       <div>
-                        <div className="text-xs text-gray-500">Frames Processed</div>
-                        <div className="text-sm font-medium">{selectedJob.results.frames_processed}</div>
+                        <div className="text-xs text-gray-500">Images Captured</div>
+                        <div className="text-sm font-medium">{selectedJob.imagesCaptured || 0}</div>
                       </div>
                     </>
                   )}
                 </div>
 
-                {/* Progress */}
+                {/* Processing Progress */}
                 {selectedJob.status === 'processing' && (
                   <div>
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
@@ -501,9 +505,10 @@ export default function ObjectCounterPage() {
                   </div>
                 )}
 
-                {/* Results */}
+                {/* Completed Job Results */}
                 {selectedJob.status === 'completed' && selectedJob.results && (
                   <div className="space-y-4">
+                    {/* Video Info */}
                     <div>
                       <h3 className="text-sm font-semibold mb-2">Video Information</h3>
                       <div className="grid grid-cols-2 gap-2 text-sm">
@@ -514,6 +519,25 @@ export default function ObjectCounterPage() {
                       </div>
                     </div>
 
+                    {/* Captured Images */}
+                    {images.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-semibold mb-2">Captured Images ({images.length})</h3>
+                        <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                          {images.map((img, idx) => (
+                            <img
+                              key={idx}
+                              src={ObjectCounterService.getImageUrl(img.url)}
+                              alt={img.filename}
+                              className="w-full h-24 object-cover rounded border hover:scale-105 transition cursor-pointer"
+                              onClick={() => window.open(ObjectCounterService.getImageUrl(img.url), '_blank')}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Detection Events Table */}
                     {selectedJob.results.detections?.length > 0 && (
                       <div>
                         <h3 className="text-sm font-semibold mb-2">Detection Events ({selectedJob.results.detections.length})</h3>
@@ -530,7 +554,7 @@ export default function ObjectCounterPage() {
                             </thead>
                             <tbody>
                               {selectedJob.results.detections.map((det, idx) => (
-                                <tr key={idx} className="border-t">
+                                <tr key={idx} className="border-t hover:bg-gray-50">
                                   <td className="px-2 py-1">{det.object_id}</td>
                                   <td className="px-2 py-1">{det.class}</td>
                                   <td className="px-2 py-1">
@@ -540,7 +564,7 @@ export default function ObjectCounterPage() {
                                       {det.direction}
                                     </span>
                                   </td>
-                                  <td className="px-2 py-1">{det.timestamp}</td>
+                                  <td className="px-2 py-1">{new Date(det.timestamp).toLocaleTimeString()}</td>
                                   <td className="px-2 py-1">{(det.confidence * 100).toFixed(1)}%</td>
                                 </tr>
                               ))}
@@ -552,23 +576,11 @@ export default function ObjectCounterPage() {
                   </div>
                 )}
 
-                {/* Error */}
+                {/* Failed Job Error */}
                 {selectedJob.status === 'failed' && (
                   <div className="rounded-lg bg-red-50 border border-red-200 p-4">
                     <div className="text-sm font-medium text-red-800">Processing Failed</div>
-                    <div className="text-xs text-red-600 mt-1">{selectedJob.error}</div>
-                  </div>
-                )}
-
-                {/* Logs */}
-                {selectedJob.logs && selectedJob.logs.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-semibold mb-2">Processing Logs</h3>
-                    <div className="max-h-40 overflow-y-auto bg-gray-900 text-gray-100 p-3 rounded-lg text-xs font-mono">
-                      {selectedJob.logs.map((log, idx) => (
-                        <div key={idx}>{log}</div>
-                      ))}
-                    </div>
+                    <div className="text-xs text-red-600 mt-1">{selectedJob.errorMessage}</div>
                   </div>
                 )}
               </div>

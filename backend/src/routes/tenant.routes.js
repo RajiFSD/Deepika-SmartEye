@@ -4,6 +4,7 @@ const tenantController = require('../controllers/tenantController');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const { extractTenantContext, allowSuperAdminAccess } = require('../middleware/tenantMiddleware');
 
+console.log('Tenant routes loaded');
 // All routes require authentication
 router.use(authenticateToken);
 

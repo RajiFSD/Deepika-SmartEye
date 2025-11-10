@@ -22,11 +22,8 @@ function AdminLoginPage({ setIsAdminAuth }) {
      
 
        const response = await authService.login(email, password);
-      console.log('Login successful:', response);
-
-      const data = response;
-
-     console.log('User role:', data.data.user.role);
+      
+      const data = response;   
       // Check if user has admin privileges
       if (data.data.user.role !== 'super_admin' && data.data.user.role !== 'admin') {
         throw new Error('Access denied. Admin privileges required.');
@@ -53,7 +50,7 @@ function AdminLoginPage({ setIsAdminAuth }) {
           <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <Users className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">User Management</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Administration Hub</h1>
           <p className="text-gray-600">Admin Access Only</p>
         </div>
 

@@ -7,6 +7,7 @@ import { Users, Plus, Edit2, Trash2, LogOut, Shield, Search, Filter, AlertTriang
 import UserFormModal from '../components/UserFormModal';
 import adminService from '../services/adminService';
 import tenantService from '../services/tenantService';
+import authService from '../services/authService';
 
 function UserManagementPage({ setIsAdminAuth }) {
   const [users, setUsers] = useState([]);
@@ -18,21 +19,20 @@ function UserManagementPage({ setIsAdminAuth }) {
   const [filterRole, setFilterRole] = useState('all');
   const [deletingUser, setDeletingUser] = useState(null);
   const token = localStorage.getItem('adminToken');
+  const tenantId = localStorage.getItem('tenantId') || null;
   const navigate = useNavigate();
 
   const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
-  console.log('Admin user from localStorage:', adminUser);
-
+  
   useEffect(() => {
     loadUsers();
     loadTenants();
   }, []);
 
   const loadUsers = async () => {
-    try {
-      console.log('Loading users with adminToken:', token);
-      const usersData = await adminService.getUsers({ limit: 1000 });      
-      const data = usersData.data;
+    try {      
+      const usersData = await adminService.getUsersByTenantId(tenantId,{ limit: 1000 });      
+      const data = usersData.data.users;
       setUsers(data);
     } catch (error) {
       console.error('Error loading users:', error);
@@ -42,11 +42,9 @@ function UserManagementPage({ setIsAdminAuth }) {
   };
 
   const loadTenants = async () => {
-    try {
-      console.log('Loading tenants...');      
+    try {         
       const tenantsData = await tenantService.getAllTenants({ limit: 1000 });
-      const data = tenantsData.data?.tenants || [];
-      console.log('Tenants loaded:', data);
+      const data = tenantsData.data?.tenants || [];      
       setTenants(data);
     } catch (error) {
       console.error('Error loading tenants:', error);
@@ -54,8 +52,7 @@ function UserManagementPage({ setIsAdminAuth }) {
   };
 
   const handleDeleteUser = async (userId) => {
-    try {
-      console.log('Deleting user with ID:', userId);
+    try {     
       const response = await adminService.deleteUser(userId, token);
   
       loadUsers();
@@ -66,9 +63,8 @@ function UserManagementPage({ setIsAdminAuth }) {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('adminToken');
-    localStorage.removeItem('adminUser');
-    setIsAdminAuth(false);
+    setIsAuthenticated(false);
+    authService.logout();
     navigate('/admin/login');
   };
 
@@ -217,25 +213,30 @@ function UserManagementPage({ setIsAdminAuth }) {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredUsers.map((user) => (
                 <tr key={user.user_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
-                      <div className="text-sm text-gray-500">{user.email}</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      user.role === 'super_admin' ? 'bg-red-100 text-red-800' :
-                      user.role === 'admin' ? 'bg-blue-100 text-blue-800' :
-                      user.role === 'manager' ? 'bg-green-100 text-green-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {user.tenant?.tenant_name || 'N/A'}
-                  </td>
+  <td className="px-6 py-4 whitespace-nowrap">
+    <div>
+      <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
+      <div className="text-sm text-gray-500">{user.email}</div>
+    </div>
+  </td>
+  <td className="px-6 py-4 whitespace-nowrap">
+    <span className={`px-2 py-1 text-xs rounded-full ${
+      user.role === 'super_admin' ? 'bg-red-100 text-red-800' :
+      user.role === 'admin' ? 'bg-blue-100 text-blue-800' :
+      user.role === 'manager' ? 'bg-green-100 text-green-800' :
+      'bg-gray-100 text-gray-800'
+    }`}>
+      {user.role}
+    </span>
+  </td>
+  <td className="px-6 py-4 whitespace-nowrap">
+    <div>
+      <div className="text-sm text-gray-900">{user.tenant?.tenant_name || 'N/A'}</div>
+      {user.branch && (
+        <div className="text-xs text-gray-500">{user.branch.branch_name}</div>
+      )}
+    </div>
+  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs rounded-full ${
                       user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'

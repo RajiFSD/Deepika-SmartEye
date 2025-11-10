@@ -59,7 +59,7 @@ function ZoneDrawingPage() {
         camerasData = [];
       }
       
-      console.log('✅ Loaded cameras:', camerasData.length);
+    
       setCameras(camerasData);
       
       if (camerasData.length > 0) {
@@ -232,8 +232,7 @@ function ZoneDrawingPage() {
         const img = new Image();
         img.onload = () => {
           setBackgroundImage(img);
-          // Here you would typically save the image to your backend
-          console.log('📸 Image loaded, would save to backend:', file.name);
+       
           // You can implement image saving to your backend here
           // saveImageToBackend(file);
         };
@@ -257,7 +256,7 @@ function ZoneDrawingPage() {
           'Content-Type': 'multipart/form-data',
         },
       });
-      console.log('✅ Image saved:', response.data);
+      
       return response.data;
     } catch (error) {
       console.error('❌ Error saving image:', error);
@@ -312,14 +311,12 @@ function ZoneDrawingPage() {
         is_active: true,
         created_by: user?.user_id
       };
-
-      console.log('🔵 Creating zone with data:', zoneData);
+  
 
       // Call zone service to create zone in backend
       const createdZone = await zoneService.createZone(zoneData);
 
-      console.log('✅ Zone created in backend:', createdZone);
-
+    
       // Create local zone object for UI
       const newZone = {
         id: createdZone.zone_id || Date.now(),

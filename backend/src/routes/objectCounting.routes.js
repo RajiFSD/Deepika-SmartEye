@@ -1,6 +1,6 @@
 /**
- * Object Counting Routes
- * Handles video upload and camera stream object counting
+ * Object Counting Routes with Image Support
+ * Handles video upload, camera stream object counting, and image retrieval
  */
 const express = require('express');
 const router = express.Router();
@@ -11,6 +11,8 @@ const fsSync = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const objectCountingService = require('../services/objectCountingService');
 const { authenticateToken } = require('../middleware/auth');
+
+console.log('ObjectCounting routes loaded');
 
 // Storage configuration
 const storage = multer.diskStorage({
@@ -45,7 +47,7 @@ const upload = multer({
 
 /**
  * @route   POST /api/object-counting/upload
- * @desc    Upload video for object counting
+ * @desc    Upload video for object counting with image capture
  * @access  Private
  */
 router.post('/upload', authenticateToken, upload.single('video'), async (req, res) => {
@@ -57,7 +59,14 @@ router.post('/upload', authenticateToken, upload.single('video'), async (req, re
       });
     }
 
-    const { branch_id, zone_id, camera_id, model_type = 'hog' } = req.body;
+    const { 
+      branch_id, 
+      zone_id, 
+      camera_id, 
+      model_type = 'hog',
+      capture_images = 'true' 
+    } = req.body;
+    
     const userId = req.user.user_id;
 
     const jobData = {
@@ -69,7 +78,8 @@ router.post('/upload', authenticateToken, upload.single('video'), async (req, re
       zoneId: zone_id,
       cameraId: camera_id,
       modelType: model_type,
-      source: 'upload'
+      source: 'upload',
+      captureImages: capture_images === 'true' || capture_images === true
     };
 
     const job = await objectCountingService.createJob(jobData);
@@ -96,7 +106,7 @@ router.post('/upload', authenticateToken, upload.single('video'), async (req, re
 
 /**
  * @route   POST /api/object-counting/stream
- * @desc    Process camera stream for object counting
+ * @desc    Process camera stream for object counting with image capture
  * @access  Private
  */
 router.post('/stream', authenticateToken, async (req, res) => {
@@ -106,7 +116,8 @@ router.post('/stream', authenticateToken, async (req, res) => {
       duration = 60, 
       model_type = 'hog',
       branch_id,
-      zone_id 
+      zone_id,
+      capture_images = true
     } = req.body;
 
     if (!camera_id) {
@@ -145,7 +156,8 @@ router.post('/stream', authenticateToken, async (req, res) => {
       zoneId: zone_id || camera.zone_id,
       modelType: model_type,
       source: 'stream',
-      cameraName: camera.camera_name
+      cameraName: camera.camera_name,
+      captureImages: capture_images
     };
 
     const job = await objectCountingService.createJob(jobData);
@@ -177,6 +189,7 @@ router.post('/stream', authenticateToken, async (req, res) => {
  */
 router.get('/jobs', authenticateToken, async (req, res) => {
   try {
+    console.log('Fetching jobs for user:', req.user.user_id);
     const userId = req.user.user_id;
     const { status, limit = 50, offset = 0 } = req.query;
 
@@ -245,6 +258,102 @@ router.get('/job/:jobId', authenticateToken, async (req, res) => {
 });
 
 /**
+ * @route   GET /api/object-counting/job/:jobId/images
+ * @desc    Get list of captured images for a job
+ * @access  Private
+ */
+router.get('/job/:jobId/images', authenticateToken, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const userId = req.user.user_id;
+
+    const job = await objectCountingService.getJob(jobId);
+
+    if (!job) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Job not found' 
+      });
+    }
+
+    if (job.userId !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Unauthorized' 
+      });
+    }
+
+    const images = await objectCountingService.getJobImages(jobId);
+
+    res.json({
+      success: true,
+      images,
+      count: images.length
+    });
+  } catch (error) {
+    console.error('Get images error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+/**
+ * @route   GET /api/object-counting/job/:jobId/image/:filename
+ * @desc    Download a specific captured image
+ * @access  Private
+ */
+router.get('/job/:jobId/image/:filename', authenticateToken, async (req, res) => {
+  try {
+    const { jobId, filename } = req.params;
+    const userId = req.user.user_id;
+
+    const job = await objectCountingService.getJob(jobId);
+
+    if (!job) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Job not found' 
+      });
+    }
+
+    if (job.userId !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Unauthorized' 
+      });
+    }
+
+    const imageDir = objectCountingService.getJobImageDir(jobId);
+    const imagePath = path.join(imageDir, filename);
+
+    // Security: Prevent directory traversal
+    if (!imagePath.startsWith(imageDir)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid filename' 
+      });
+    }
+
+    if (!fsSync.existsSync(imagePath)) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Image not found' 
+      });
+    }
+
+    res.sendFile(imagePath);
+  } catch (error) {
+    console.error('Download image error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+/**
  * @route   POST /api/object-counting/job/:jobId/cancel
  * @desc    Cancel a running job
  * @access  Private
@@ -294,7 +403,7 @@ router.post('/job/:jobId/cancel', authenticateToken, async (req, res) => {
 
 /**
  * @route   DELETE /api/object-counting/job/:jobId
- * @desc    Delete a job and its files
+ * @desc    Delete a job and its files (including images)
  * @access  Private
  */
 router.delete('/job/:jobId', authenticateToken, async (req, res) => {
@@ -322,7 +431,7 @@ router.delete('/job/:jobId', authenticateToken, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Job deleted successfully'
+      message: 'Job and all associated files deleted successfully'
     });
   } catch (error) {
     console.error('Delete job error:', error);
@@ -468,6 +577,24 @@ router.post('/job/:jobId/save-to-database', authenticateToken, async (req, res) 
       message: error.message 
     });
   }
+});
+
+// Add to objectCounting.routes.js
+router.get('/test-python', async (req, res) => {
+  const { spawn } = require('child_process');
+  const python = spawn('python', ['--version']);
+  
+  let output = '';
+  python.stdout.on('data', (data) => output += data);
+  python.stderr.on('data', (data) => output += data);
+  
+  python.on('close', (code) => {
+    res.json({
+      success: code === 0,
+      version: output,
+      scriptExists: require('fs').existsSync(path.join(__dirname, '../../../ai-module/src/models/object_counter.py'))
+    });
+  });
 });
 
 module.exports = router;

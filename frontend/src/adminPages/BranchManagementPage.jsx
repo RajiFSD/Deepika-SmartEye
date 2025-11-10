@@ -50,27 +50,20 @@ function BranchManagementPage() {
  const loadBranches = async () => {
     try {
       setLoading(true);
-      setError('');
-      console.log('🚀 Loading branches, page:', pagination.page, 'limit:', pagination.limit);
+      setError('');   
       const response = await branchService.getBranches({
         page: pagination.page,
         limit: pagination.limit,
       });
-      
-      console.log('📦 Full Response:', response);
-      
       // Handle backend response format - response.data contains the backend's data wrapper
       const responseData = response.data || {};
       const branchesData = responseData.branches || responseData.rows || [];
-      const paginationData = responseData.pagination || {};
-      
-      console.log('📊 Branches Data:', branchesData);
-      console.log('📄 Pagination Data:', paginationData);
-      
+      const paginationData = responseData.pagination || {};      
+    
       setBranches(branchesData);
       setPagination(prev => ({
         ...prev,
-        total: paginationData.total || branchesData.length,
+        total: branchesData.length,
         totalPages: paginationData.totalPages || Math.ceil(branchesData.length / prev.limit),
       }));
     } catch (err) {

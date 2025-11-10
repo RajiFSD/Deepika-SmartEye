@@ -62,9 +62,7 @@ function PeopleCountDashboard() {
       const allLogsResponse = allLogsResult.status === 'fulfilled' ? allLogsResult.value : null;
       const analyticsResponse = analyticsResult.status === 'fulfilled' ? analyticsResult.value : null;
 
-      console.log('ðŸ“¦ Full analyticsResponse:', analyticsResponse);
-
-      // Extract cameras
+          // Extract cameras
       const camerasData = camerasResponse?.data?.data?.cameras || camerasResponse?.data?.cameras || camerasResponse?.data || [];
       const activeCameras = Array.isArray(camerasData) 
         ? camerasData.filter(cam => cam.is_active).length 
@@ -76,8 +74,7 @@ function PeopleCountDashboard() {
       // Extract all logs (for fallback calculations)
       const allLogsData = allLogsResponse?.data?.data?.rows || allLogsResponse?.data?.rows || allLogsResponse?.data?.logs || allLogsResponse?.data || [];
       
-      console.log('ðŸ“‹ Recent logs:', recentLogsData.length, 'All logs:', allLogsData.length);
-
+    
         // Extract analytics
 const analyticsData = analyticsResponse?.data || [];
 
@@ -93,9 +90,7 @@ console.log('ðŸ“Š Formatted Chart Data (first 3):', formattedChartData.slic
 // Check if analytics has actual data (not all zeros)
 const analyticsHasData = formattedChartData.some(hour => hour.entries > 0 || hour.exits > 0);
 
-console.log('ðŸ“Š Analytics Has Data?', analyticsHasData);
-console.log('ðŸ“Š Total Entries in Analytics:', formattedChartData.reduce((sum, hour) => sum + hour.entries, 0));
-console.log('ðŸ“Š Total Exits in Analytics:', formattedChartData.reduce((sum, hour) => sum + hour.exits, 0));
+
       
       let totalEntries = 0;
       let totalExits = 0;

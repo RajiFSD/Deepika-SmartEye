@@ -65,8 +65,7 @@ function UploadAnalysisPage() {
     try {
       console.log('🔍 Loading cameras...');
       const response = await cameraService.getCameras();
-      //console.log('📦 Full camera response:', JSON.stringify(response, null, 2));
-      
+           
       // Backend returns: { success: true, data: { cameras: [...], pagination: {...} } }
       let camerasData = [];
       
@@ -87,9 +86,7 @@ function UploadAnalysisPage() {
         camerasData = response;
       }
       
-      console.log('📷 Extracted cameras:', camerasData);
-      console.log('📷 Number of cameras:', camerasData.length);
-      
+         
       setCameras(Array.isArray(camerasData) ? camerasData : []);
     } catch (err) {
       console.error('❌ Error loading cameras:', err);
@@ -99,9 +96,8 @@ function UploadAnalysisPage() {
 
   const loadRecentJobs = async () => {
     try {
-      console.log('🔍 Loading recent jobs...');
-      const response = await uploadAnalysisService.getAllJobs({ limit: 5 });
-      //console.log('📦 Full jobs response:', JSON.stringify(response, null, 2));
+     
+      const response = await uploadAnalysisService.getAllJobs({ limit: 5 });     
       
       // Backend returns: { success: true, data: { jobs: [...], pagination: {...} } }
       let jobsData = [];
@@ -123,8 +119,7 @@ function UploadAnalysisPage() {
         jobsData = response;
       }
       
-      console.log('📋 Extracted jobs:', jobsData);
-      console.log('📋 Number of jobs:', jobsData.length);
+      
            if (jobsData.length > 0 && jobsData[0].result_json) {
         try {
           const parsedResult = JSON.parse(jobsData[0].result_json);

@@ -9,7 +9,7 @@ class TenantController {
   async getAllTenants(req, res) {
     try {
       const { page, limit, search, is_active } = req.query;
-      
+      console.log('Received getAllTenants request with query:', req.query);
       const result = await tenantService.getAllTenants({
         page: parseInt(page) || 1,
         limit: parseInt(limit) || 10,

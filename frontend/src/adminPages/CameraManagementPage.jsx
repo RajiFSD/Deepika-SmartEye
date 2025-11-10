@@ -31,6 +31,8 @@ function CameraManagementPage() {
   });
 
   const user = authService.getCurrentUser();
+   const tenantId = localStorage.getItem('tenantId') || null;
+
 
   // Load initial data
   useEffect(() => {
@@ -43,12 +45,7 @@ function CameraManagementPage() {
       setLoading(true);
       setError('');
       
-      const response = await cameraService.getCameras({
-        page: pagination.page,
-        limit: pagination.limit,
-      });
-      
-      console.log('📊 Camera response:', response);
+      const response = await cameraService.getCamerasByTenant(tenantId, { limit: 1000 });      
       
       // ✅ Handle different response formats
       let camerasData = [];
@@ -82,8 +79,8 @@ function CameraManagementPage() {
         console.warn('⚠️ Cameras data is not an array, resetting to empty array');
         camerasData = [];
       }
+         
       
-      console.log('✅ Setting cameras:', camerasData.length, 'cameras');
       setCameras(camerasData);
       setPagination(prev => ({
         ...prev,
@@ -100,14 +97,12 @@ function CameraManagementPage() {
   };
 
   const loadBranches = async () => {
-    try {
-      console.log('🏢 Loading branches...');
+    try {    
       const response = await branchService.getBranches({
         page: 1,
         limit: 100, // Get all branches
       });
       
-      console.log('📊 Branch response:', response);
       
       // ✅ Handle different response formats
       let branchData = [];
@@ -129,8 +124,7 @@ function CameraManagementPage() {
         branchData = [];
       }
       
-      console.log('✅ Setting branches:', branchData.length, 'branches');
-      setBranches(branchData);
+     setBranches(branchData);
     } catch (err) {
       console.error('❌ Error loading branches:', err);
       setBranches([]); // ✅ Reset to empty array on error

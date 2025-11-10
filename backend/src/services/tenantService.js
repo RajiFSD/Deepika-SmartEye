@@ -7,6 +7,7 @@ class TenantService {
    */
   async getAllTenants({ page = 1, limit = 10, search = '', isActive = null }) {
     try {
+      console.log('Fetching tenants with params:', { page, limit, search, isActive });
       const offset = (page - 1) * limit;
       const whereClause = {};
 

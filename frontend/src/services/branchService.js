@@ -15,13 +15,11 @@ const branchService = {
         ...(search && { search }),
         ...(isActive !== '' && { is_active: isActive }),
       });
-      console.log('🔵 Query Params:', queryParams.toString());
+     
       
       const response = await api.get(`/branches?${queryParams}`);
       
-      console.log('✅ Full Response Object:', response);
-      console.log('✅ Response Data:', response.data);
-      console.log('✅ Response Status:', response.status);
+    
       
       return response.data;
     } catch (error) {
@@ -53,12 +51,10 @@ const branchService = {
   // Get active branches (for dropdowns)
   getActiveBranches: async () => {
     try {
-      console.log('🔵 Fetching active branches');
-      
+           
       const response = await api.get('/branches/active');
       
-      console.log('✅ Active branches fetched:', response.data);
-      
+          
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching active branches:', error);
@@ -69,12 +65,9 @@ const branchService = {
   // Create new branch
   createBranch: async (branchData) => {
     try {
-      console.log('🔵 Creating branch:', branchData);
-      
+            
       const response = await api.post('/branches', branchData);
-      
-      console.log('✅ Branch created:', response.data);
-      
+            
       return response.data;
     } catch (error) {
       console.error('❌ Error creating branch:', error);
@@ -86,12 +79,8 @@ const branchService = {
   // Update branch
   updateBranch: async (branchId, branchData) => {
     try {
-      console.log('🔵 Updating branch:', branchId, branchData);
-      
-      const response = await api.put(`/branches/${branchId}`, branchData);
-      
-      console.log('✅ Branch updated:', response.data);
-      
+      const response = await api.put(`/branches/${branchId}`, branchData);     
+          
       return response.data;
     } catch (error) {
       console.error('❌ Error updating branch:', error);
@@ -103,12 +92,9 @@ const branchService = {
   // Delete branch (soft delete)
   deleteBranch: async (branchId) => {
     try {
-      console.log('🔵 Deleting branch:', branchId);
-      
+       
       const response = await api.delete(`/branches/${branchId}`);
-      
-      console.log('✅ Branch deleted:', response.data);
-      
+           
       return response.data;
     } catch (error) {
       console.error('❌ Error deleting branch:', error);
@@ -123,7 +109,7 @@ const branchService = {
       
       const response = await api.get(`/branches/${branchId}/stats`);
       
-      console.log('✅ Branch stats fetched:', response.data);
+     
       
       return response.data;
     } catch (error) {

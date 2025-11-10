@@ -33,13 +33,8 @@ const tenantService = {
 
   // Get single tenant by ID
   getTenantById: async (tenantId) => {
-    try {
-      console.log('🔵 Fetching tenant:', tenantId);
-      console.log('🔵 Endpoint:', api.defaults.baseURL + `/tenants/${tenantId}`);
-      const response = await api.get(`/tenants/${tenantId}`);
-      
-      console.log('✅ Tenant fetched:', response.data);
-      
+    try {   
+      const response = await api.get(`/tenants/${tenantId}`);              
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching tenant:', error);
@@ -49,13 +44,8 @@ const tenantService = {
 
   // Get current tenant info
   getCurrentTenant: async () => {
-    try {
-      console.log('🔵 Fetching current tenant');
-      
-      const response = await api.get('/tenants/current');
-      
-      console.log('✅ Current tenant fetched:', response.data);
-      
+    try {           
+      const response = await api.get('/tenants/current');          
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching current tenant:', error);
@@ -65,13 +55,8 @@ const tenantService = {
 
   // Create new tenant (super admin only)
   createTenant: async (tenantData) => {
-    try {
-      console.log('🔵 Creating tenant:', tenantData);
-      
-      const response = await api.post('/tenants', tenantData);
-      
-      console.log('✅ Tenant created:', response.data);
-      
+    try {      
+      const response = await api.post('/tenants', tenantData);      
       return response.data;
     } catch (error) {
       console.error('❌ Error creating tenant:', error);
@@ -82,13 +67,8 @@ const tenantService = {
 
   // Update tenant
   updateTenant: async (tenantId, tenantData) => {
-    try {
-      console.log('🔵 Updating tenant:', tenantId, tenantData);
-      
-      const response = await api.put(`/tenants/${tenantId}`, tenantData);
-      
-      console.log('✅ Tenant updated:', response.data);
-      
+    try {     
+      const response = await api.put(`/tenants/${tenantId}`, tenantData);      
       return response.data;
     } catch (error) {
       console.error('❌ Error updating tenant:', error);
@@ -99,13 +79,8 @@ const tenantService = {
 
   // Delete tenant (soft delete)
   deleteTenant: async (tenantId) => {
-    try {
-      console.log('🔵 Deleting tenant:', tenantId);
-      
+    try {   
       const response = await api.delete(`/tenants/${tenantId}`);
-      
-      console.log('✅ Tenant deleted:', response.data);
-      
       return response.data;
     } catch (error) {
       console.error('❌ Error deleting tenant:', error);
@@ -115,13 +90,8 @@ const tenantService = {
 
   // Get tenant statistics
   getTenantStats: async (tenantId) => {
-    try {
-      console.log('🔵 Fetching tenant stats:', tenantId);
-      
-      const response = await api.get(`/tenants/${tenantId}/stats`);
-      
-      console.log('✅ Tenant stats fetched:', response.data);
-      
+    try {      
+      const response = await api.get(`/tenants/${tenantId}/stats`);      
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching tenant stats:', error);
@@ -132,13 +102,8 @@ const tenantService = {
   // Check subscription limits
   checkSubscriptionLimits: async (tenantId) => {
     try {
-      console.log('🔵 Checking subscription limits:', tenantId);
-      
       const response = await api.get(`/tenants/${tenantId}/subscription-limits`);
-      
-      console.log('✅ Subscription limits fetched:', response.data);
-      
-      return response.data;
+       return response.data;
     } catch (error) {
       console.error('❌ Error checking subscription limits:', error);
       throw error.response?.data?.message || error.message || 'Failed to check subscription limits';

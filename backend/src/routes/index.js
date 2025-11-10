@@ -36,6 +36,6 @@ router.use("/admin", adminRoutes);
 router.use("/camera", cameraStreamRoutes);
 router.use("/role-plugins", rolePluginRoutes);
 router.use("/plans", planRoutes);
-router.use("/object-counting-jobs", ObjectCountingJobRoutes);   
+router.use("/object-counting", ObjectCountingJobRoutes);   
 
 module.exports = router;
