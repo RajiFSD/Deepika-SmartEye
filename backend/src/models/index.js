@@ -17,6 +17,11 @@ const Plan = require('./Plan');
 const PlanFeature = require('./PlanFeature');
 const ObjectCountingJob = require('./objectCountingJob.model');
 const RolePlugin = require('./RolePlugin');
+// 🆕 Product-related Models
+const Product = require("./Product");
+const ProductConfiguration = require("./ProductConfiguration");
+const TenantProduct = require("./TenantProduct");
+const ProductScanResult = require("./ProductScanResult");
 
 // ✅ Verify all models are loaded
 console.log('📦 Verifying models loaded:', {
@@ -44,6 +49,10 @@ const models = {
   PlanFeature,
   ObjectCountingJob,
   RolePlugin,
+  Product,
+  ProductConfiguration,
+  TenantProduct,
+  ProductScanResult,
 };
 
 // ✅ ============================================
@@ -73,7 +82,9 @@ Tenant.hasMany(PeopleCountLog, { foreignKey: "tenant_id", as: "peopleCountLogs" 
 Tenant.hasMany(CurrentOccupancy, { foreignKey: "tenant_id", as: "currentOccupancies" });
 Tenant.hasMany(PluginJob, { foreignKey: "tenant_id", as: "pluginJobs" });
 Tenant.hasMany(DetectionAccuracy, { foreignKey: "tenant_id", as: "detectionAccuracies" });
-
+Tenant.belongsTo(Plan, { foreignKey: 'subscription_plan_id', as: 'subscriptionPlan',});
+Tenant.hasMany(TenantProduct, { foreignKey: "tenant_id", as: "tenantProducts", onDelete: "CASCADE", onUpdate: "CASCADE"});
+Tenant.hasMany(ProductScanResult, { foreignKey: "tenant_id", as: "productScanResults", onDelete: "SET NULL", onUpdate: "CASCADE"});
 // ============================================
 // User Associations
 // ============================================
@@ -83,6 +94,8 @@ User.hasMany(ZoneConfig, { foreignKey: "created_by", as: "createdZones" });
 User.hasMany(PluginJob, { foreignKey: "user_id", as: "pluginJobs" });
 User.hasMany(ObjectCountingJob, { foreignKey: "user_id", as: "objectCountingJobs" });
 User.belongsTo(Branch, { foreignKey: 'branch_id', as: 'branch' });
+User.hasMany(ProductScanResult, { foreignKey: "scanned_by", as: "scannedProducts", onDelete: "SET NULL", onUpdate: "CASCADE"});
+User.hasMany(TenantProduct, { foreignKey: "user_id", as: "userProducts", onDelete: "CASCADE", onUpdate: "CASCADE"});
 
 // ============================================
 // Branch Associations
@@ -93,6 +106,8 @@ Branch.hasMany(PeopleCountLog, { foreignKey: "branch_id", as: "peopleCountLogs" 
 Branch.hasMany(CurrentOccupancy, { foreignKey: "branch_id", as: "currentOccupancies" });
 Branch.hasMany(ObjectCountingJob, { foreignKey: "branch_id", as: "objectCountingJobs" });
 Branch.hasMany(User, { foreignKey: 'branch_id', as: 'users' });
+Branch.hasMany(TenantProduct, { foreignKey: "branch_id", as: "branchProducts", onDelete: "CASCADE", onUpdate: "CASCADE"});
+Branch.hasMany(ProductScanResult, { foreignKey: "branch_id", as: "branchScanResults", onDelete: "SET NULL", onUpdate: "CASCADE"});
 
 // ============================================
 // Camera Associations
@@ -107,6 +122,8 @@ Camera.hasMany(CurrentOccupancy, { foreignKey: "camera_id", as: "currentOccupanc
 Camera.hasMany(PluginJob, { foreignKey: "camera_id", as: "pluginJobs" });
 Camera.hasMany(DetectionAccuracy, { foreignKey: "camera_id", as: "detectionAccuracies" });
 Camera.hasMany(ObjectCountingJob, { foreignKey: "camera_id", as: "objectCountingJobs" });
+Camera.hasMany(TenantProduct, { foreignKey: "camera_id", as: "cameraProducts", onDelete: "CASCADE", onUpdate: "CASCADE" });
+Camera.hasMany(ProductScanResult, { foreignKey: "camera_id", as: "cameraScanResults", onDelete: "SET NULL", onUpdate: "CASCADE" });
 
 // ============================================
 // ZoneConfig Associations
@@ -216,9 +233,110 @@ Plan.hasMany(Tenant, {
   as: 'subscribers',
 });
 
-Tenant.belongsTo(Plan, {
-  foreignKey: 'subscription_plan_id',
-  as: 'subscriptionPlan',
+// ============================================
+// 🆕 PRODUCT MODULE ASSOCIATIONS 
+// ============================================
+
+// Product ↔ ProductConfiguration
+Product.hasMany(ProductConfiguration, { 
+  foreignKey: "product_id", 
+  as: "configurations", 
+  onDelete: "CASCADE", 
+  onUpdate: "CASCADE"
+});
+ProductConfiguration.belongsTo(Product, { 
+  foreignKey: "product_id", 
+  as: "baseProduct", // ✅ unique alias
+  onDelete: "CASCADE", 
+  onUpdate: "CASCADE"
+});
+ProductConfiguration.hasMany(TenantProduct, { 
+  foreignKey: "configuration_id", 
+  as: "tenantMappings", 
+  onDelete: "SET NULL", 
+  onUpdate: "CASCADE"
+});
+
+// Product ↔ TenantProduct
+Product.hasMany(TenantProduct, { 
+  foreignKey: "product_id", 
+  as: "tenantProductMappings", 
+  onDelete: "CASCADE", 
+  onUpdate: "CASCADE"
+});
+TenantProduct.belongsTo(Product, { 
+  foreignKey: "product_id", 
+  as: "mappedProduct", // ✅ unique alias
+  onDelete: "CASCADE", 
+  onUpdate: "CASCADE"
+});
+TenantProduct.belongsTo(ProductConfiguration, { 
+  foreignKey: "configuration_id", 
+  as: "configDetails", 
+  onDelete: "SET NULL", 
+  onUpdate: "CASCADE"
+});
+TenantProduct.belongsTo(Tenant, { 
+  foreignKey: "tenant_id", 
+  as: "tenant", 
+  onDelete: "CASCADE", 
+  onUpdate: "CASCADE"
+});
+TenantProduct.belongsTo(Branch, { 
+  foreignKey: "branch_id", 
+  as: "branch", 
+  onDelete: "CASCADE", 
+  onUpdate: "CASCADE"
+});
+TenantProduct.belongsTo(Camera, { 
+  foreignKey: "camera_id", 
+  as: "camera", 
+  onDelete: "CASCADE", 
+  onUpdate: "CASCADE"
+});
+TenantProduct.belongsTo(User, { 
+  foreignKey: "user_id", 
+  as: "user", 
+  onDelete: "CASCADE", 
+  onUpdate: "CASCADE"
+});
+
+// Product ↔ ProductScanResult
+Product.hasMany(ProductScanResult, { 
+  foreignKey: "product_id", 
+  as: "scanResults", 
+  onDelete: "SET NULL", 
+  onUpdate: "CASCADE"
+});
+ProductScanResult.belongsTo(Product, { 
+  foreignKey: "product_id", 
+  as: "scannedProduct", // ✅ unique alias
+  onDelete: "SET NULL", 
+  onUpdate: "CASCADE"
+});
+ProductScanResult.belongsTo(Tenant, { 
+  foreignKey: "tenant_id", 
+  as: "tenant", 
+  onDelete: "SET NULL", 
+  onUpdate: "CASCADE"
+});
+ProductScanResult.belongsTo(Branch, { 
+  foreignKey: "branch_id", 
+  as: "branch", 
+  onDelete: "SET NULL", 
+  onUpdate: "CASCADE"
+});
+ProductScanResult.belongsTo(Camera, { 
+  foreignKey: "camera_id", 
+  as: "camera", 
+  onDelete: "SET NULL", 
+  onUpdate: "CASCADE"
+});
+ProductScanResult.belongsTo(User, { 
+  foreignKey: "scanned_by", 
+  as: "scannedBy", 
+  onDelete: "SET NULL", 
+  onUpdate: "CASCADE"
 });
 
 console.log('✅ All model associations set up successfully');

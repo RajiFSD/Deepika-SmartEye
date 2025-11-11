@@ -18,6 +18,11 @@ const cameraStreamRoutes = require("./cameraStreamRoutes");
 const rolePluginRoutes = require("./rolePluginRoutes");
 const planRoutes = require('./plan.routes');
 const ObjectCountingJobRoutes = require('./objectCountingJob.routes');
+const productRoutes = require("./product.routes");
+const productConfigRoutes = require("./productConfig.routes");
+const tenantProductRoutes = require("./tenantProduct.routes");
+const productScanRoutes = require("./productScanResult.routes");
+
 
 console.log("Main routes loaded");
 router.use("/auth", authRoutes);
@@ -36,6 +41,10 @@ router.use("/admin", adminRoutes);
 router.use("/camera", cameraStreamRoutes);
 router.use("/role-plugins", rolePluginRoutes);
 router.use("/plans", planRoutes);
-router.use("/object-counting", ObjectCountingJobRoutes);   
+router.use("/object-counting", ObjectCountingJobRoutes); 
+router.use("/products", productRoutes);
+router.use("/product-config", productConfigRoutes);
+router.use("/tenant-products", tenantProductRoutes);
+router.use("/product-scans", productScanRoutes);  
 
 module.exports = router;

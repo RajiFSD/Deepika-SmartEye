@@ -12,23 +12,22 @@ const { Op } = require('sequelize');
 
 class ObjectCountingService {
   constructor() {
-   this.activeProcesses = new Map();   
-  
-  // Fix the path - adjust based on your actual structure
-  //this.pythonScript = path.join(__dirname, '../../../../ai-module/src/models/object_counter.py');
-   //this.pythonScript = path.resolve('D:\\Web APP\\ai-module\\src\\models\\object_counter.py');
-  // OR use absolute path for now:
-  this.pythonScript = 'D:\\Web APP\\Smarteye\\ai-module\\src\\models\\object_counter.py';
-  
-  this.resultsDir = path.join(__dirname, '../uploads/object-counting/results');
-  this.imagesDir = path.join(__dirname, '../uploads/object-counting/images');
-  
-  console.log('📁 Python script path:', this.pythonScript);
-  console.log('📁 Python script exists:', fsSync.existsSync(this.pythonScript));
+  this.activeProcesses = new Map();
 
-  this.ensureDirectories();
+  // ✅ Cross-platform safe Python script path
+  this.pythonScript = path.resolve(__dirname, "../../../ai-module/src/models/object_counter.py");
+
+  if (!fsSync.existsSync(this.pythonScript)) {
+    console.warn("⚠️ Python script not found at:", this.pythonScript);
+  } else {
+    console.log("✅ Using Python script path:", this.pythonScript);
   }
 
+  // ✅ Directories for storing results and images
+  this.resultsDir = path.join(__dirname, "../uploads/object-counting/results");
+  this.imagesDir = path.join(__dirname, "../uploads/object-counting/images");
+  this.ensureDirectories();
+}
   async ensureDirectories() {
     const dirs = [
       path.join(__dirname, '../uploads/object-counting'),

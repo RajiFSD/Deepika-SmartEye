@@ -439,6 +439,86 @@ const rolePluginValidator = Joi.object({
     .required(),
   screen_name: Joi.string().min(3).max(100).required(),
 });
+
+const productConfigValidator = {
+  create: Joi.object({
+    product_id: commonValidators.id,
+    layers_count: Joi.number().integer().min(1),
+    racks_per_layer: Joi.number().integer().min(1),
+    items_per_rack: Joi.number().integer().min(1),
+    box_capacity: Joi.number().integer().optional(),
+    bottle_ml: Joi.number().integer().optional(),
+    arrangement_type: Joi.string().max(100).optional(),
+    tolerance_limit: Joi.number().integer().default(0),
+  }),
+  update: Joi.object({
+    layers_count: Joi.number().integer().optional(),
+    racks_per_layer: Joi.number().integer().optional(),
+    items_per_rack: Joi.number().integer().optional(),
+    box_capacity: Joi.number().integer().optional(),
+    bottle_ml: Joi.number().integer().optional(),
+    arrangement_type: Joi.string().max(100).optional(),
+    tolerance_limit: Joi.number().integer().optional(),
+  }).min(1),
+};
+
+const productValidator = {
+  create: Joi.object({
+    product_name: commonValidators.name.required(),
+    product_type: Joi.string().max(100).optional().allow(""),
+    size: Joi.string().max(100).optional().allow(""),
+    description: Joi.string().optional().allow(""),
+    uom: Joi.string().max(50).optional().allow(""),
+  }),
+  update: Joi.object({
+    product_name: commonValidators.name.optional(),
+    product_type: Joi.string().max(100).optional(),
+    size: Joi.string().max(100).optional(),
+    description: Joi.string().optional(),
+    uom: Joi.string().max(50).optional(),
+  }).min(1),
+};
+
+const tenantProductValidator = {
+  create: Joi.object({
+    tenant_id: commonValidators.id,
+    branch_id: commonValidators.id,
+    camera_id: commonValidators.id,
+    user_id: commonValidators.id,
+    product_id: commonValidators.id,
+    configuration_id: commonValidators.optionalId,
+    is_active: commonValidators.boolean.default(true),
+  }),
+  update: Joi.object({
+    branch_id: commonValidators.optionalId,
+    camera_id: commonValidators.optionalId,
+    user_id: commonValidators.optionalId,
+    product_id: commonValidators.optionalId,
+    configuration_id: commonValidators.optionalId,
+    is_active: commonValidators.boolean.optional(),
+  }).min(1),
+};
+
+const productScanValidator = {
+  create: Joi.object({
+    tenant_id: commonValidators.id,
+    branch_id: commonValidators.id,
+    camera_id: commonValidators.id,
+    product_id: commonValidators.id,
+    scanned_by: commonValidators.id,
+    total_expected: Joi.number().integer().min(0).required(),
+    total_detected: Joi.number().integer().min(0).required(),
+    missing_count: Joi.number().integer().min(0).optional(),
+    qr_code: Joi.string().max(255).optional().allow(""),
+    manufacturing_date: commonValidators.date.optional(),
+    expiry_date: commonValidators.date.optional(),
+    batch_number: Joi.string().max(100).optional().allow(""),
+    result_status: Joi.string().valid("OK", "NOT_OK").required(),
+    alarm_triggered: commonValidators.boolean.optional(),
+    remarks: Joi.string().optional().allow(""),
+  }),
+};
+
 // Export all validators
 module.exports = {
   // Auth
@@ -476,5 +556,11 @@ module.exports = {
   aiDetectionValidator,
 
   // Common validators for reuse
-  commonValidators
+  commonValidators,
+
+  //Products Validators
+  productConfigValidator,
+  productValidator,
+  tenantProductValidator,
+  productScanValidator,
 };

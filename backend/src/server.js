@@ -36,6 +36,10 @@ const cameraStreamRoutes = require('./routes/cameraStreamRoutes');
 const planRoutes = require('./routes/plan.routes');
 const ObjectCountingJobRoutes = require('./routes/objectCounting.routes');
 const rolePluginRoutes = require('./routes/rolePluginRoutes');
+const productRoutes = require("./routes/product.routes");
+const productConfigRoutes = require("./routes/productConfig.routes");
+const tenantProductRoutes = require("./routes/tenantProduct.routes");
+const productScanRoutes = require("./routes/productScanResult.routes");
 
 
 class Server {
@@ -160,6 +164,10 @@ class Server {
     this.app.use('/api/plans', planRoutes);
     this.app.use('/api/object-counting', ObjectCountingJobRoutes);
     this.app.use('/api/role-plugins', rolePluginRoutes);
+    this.app.use('/api/products', productRoutes);
+    this.app.use('/api/product-config', productConfigRoutes);
+    this.app.use('/api/tenant-products', tenantProductRoutes);
+    this.app.use('/api/product-scans', productScanRoutes);
     
     // Health check
     this.app.get('/api/health', (req, res) => {
