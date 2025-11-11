@@ -1,5 +1,28 @@
-ultralytics 
+# Product Counter Requirements
+# Install with: pip install -r requirements.txt
+
+# Deep Learning & Computer Vision
 opencv-python>=4.8.0
+opencv-contrib-python>=4.8.0
+ultralytics>=8.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Data Processing
 numpy>=1.24.0
-requests 
-pyyaml 
+pandas>=2.0.0
+
+# Utilities
+pillow>=10.0.0
+tqdm>=4.65.0
+
+# Optional: GPU acceleration
+# tensorflow-gpu>=2.13.0  # For GPU support
+
+# Note: YOLO models will be auto-downloaded on first run
+# You can also download manually:
+# - YOLOv8n: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt
+# - YOLOv8s: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt
+# - YOLOv8m: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt
+# - YOLOv8l: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt
+# - YOLOv8x: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt

@@ -48,7 +48,7 @@ class AdminService {
           {
             model: RolePlugin,
             as: 'role',
-            attributes: ['role_id', 'role_name', 'description'],
+            attributes: ['role_id', 'role_name', 'screen_name'],
             required: false
           }
         ]
