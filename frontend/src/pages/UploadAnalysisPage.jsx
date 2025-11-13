@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Upload, FileVideo, Image, Play, BarChart3, CheckCircle, XCircle, RefreshCw, Clock, AlertCircle, StopCircle, Pause, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Upload, FileVideo, Image, Play, CheckCircle, XCircle, AlertCircle, StopCircle, Pause, ArrowDownCircle, ArrowUpCircle, Video } from 'lucide-react';
 import uploadAnalysisService from '../services/uploadAnalysisService';
 import cameraService from '../services/cameraService';
+
+const CAMERA_API_URL = import.meta.env.VITE_CAMERA_API_URL || 'http://localhost:5000';
 
 function UploadAnalysisPage() {
   const [selectedFile, setSelectedFile] = useState(null);  
@@ -16,7 +18,7 @@ function UploadAnalysisPage() {
   const [error, setError] = useState(null);
   const [backendConnected, setBackendConnected] = useState(false);
   
-  // New states for streaming and counts
+  // Streaming states
   const [streamUrl, setStreamUrl] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -24,24 +26,43 @@ function UploadAnalysisPage() {
   const [videoDuration, setVideoDuration] = useState(null);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   
+  // Live stream display
+  const [liveStreamActive, setLiveStreamActive] = useState(false);
+  const [liveStreamId, setLiveStreamId] = useState(null);
+  const [cameraApiConnected, setCameraApiConnected] = useState(false);
+  
+  // Stream configuration
+  const [streamConfig, setStreamConfig] = useState({
+    ip: '',
+    port: '8080',
+    username: '',
+    password: '',
+    protocol: 'http',
+    channel: '1'
+  });
+  
   const pollIntervalRef = useRef(null);
   const countsIntervalRef = useRef(null);
+  const videoRef = useRef(null);
 
   useEffect(() => {
-    checkBackendConnection();    
+    checkBackendConnection();
+    checkCameraApiConnection();
     loadRecentJobs();
     loadCameras();
     
     return () => {
       clearInterval(pollIntervalRef.current);
       clearInterval(countsIntervalRef.current);
+      if (liveStreamId) {
+        stopLiveStream();
+      }
     };
   }, []);
 
   const checkBackendConnection = async () => {
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-      // Try /api/health first, then /health
       let response = await fetch(`${API_BASE_URL}/health`).catch(() => null);
       
       if (!response?.ok) {
@@ -53,7 +74,7 @@ function UploadAnalysisPage() {
       if (!response?.ok) {
         setError('⚠️ Backend server is not running. Please start the backend server on port 3000.');
       } else {
-        setError(null); // Clear error if connection successful
+        setError(null);
       }
     } catch (err) {
       setBackendConnected(false);
@@ -61,32 +82,34 @@ function UploadAnalysisPage() {
     }
   };
 
+  const checkCameraApiConnection = async () => {
+    try {
+      const response = await fetch(`${CAMERA_API_URL}/api/health`);
+      const data = await response.json();
+      setCameraApiConnected(data.status === 'running');
+    } catch (err) {
+      console.error('Camera API not connected:', err);
+      setCameraApiConnected(false);
+    }
+  };
+
   const loadCameras = async () => {
     try {
-      console.log('🔍 Loading cameras...');
       const response = await cameraService.getCameras();
-           
-      // Backend returns: { success: true, data: { cameras: [...], pagination: {...} } }
       let camerasData = [];
       
       if (response?.data?.data?.cameras) {
-        // Axios response with nested data
         camerasData = response.data.data.cameras;
       } else if (response?.data?.cameras) {
-        // Direct data.cameras
         camerasData = response.data.cameras;
       } else if (response?.cameras) {
-        // Direct cameras
         camerasData = response.cameras;
       } else if (Array.isArray(response?.data)) {
-        // Direct array in data
         camerasData = response.data;
       } else if (Array.isArray(response)) {
-        // Direct array
         camerasData = response;
       }
       
-         
       setCameras(Array.isArray(camerasData) ? camerasData : []);
     } catch (err) {
       console.error('❌ Error loading cameras:', err);
@@ -96,41 +119,20 @@ function UploadAnalysisPage() {
 
   const loadRecentJobs = async () => {
     try {
-     
-      const response = await uploadAnalysisService.getAllJobs({ limit: 5 });     
-      
-      // Backend returns: { success: true, data: { jobs: [...], pagination: {...} } }
+      const response = await uploadAnalysisService.getAllJobs({ limit: 5 });
       let jobsData = [];
       
       if (response?.data?.data?.jobs) {
-        // Axios response with nested data
         jobsData = response.data.data.jobs;
       } else if (response?.data?.jobs) {
-        // Direct data.jobs
         jobsData = response.data.jobs;
       } else if (response?.jobs) {
-        // Direct jobs
         jobsData = response.jobs;
       } else if (Array.isArray(response?.data)) {
-        // Direct array in data
         jobsData = response.data;
       } else if (Array.isArray(response)) {
-        // Direct array
         jobsData = response;
       }
-      
-      
-           if (jobsData.length > 0 && jobsData[0].result_json) {
-        try {
-          const parsedResult = JSON.parse(jobsData[0].result_json);
-          console.log("First job - Entries:", parsedResult.entries);
-          console.log("First job - Exits:", parsedResult.exits);
-          console.log("First job - Net Count:", parsedResult.netCount);
-        } catch (e) {
-          console.log("Could not parse result_json for first job");
-        }
-      }
-      
       
       setRecentJobs(jobsData);
     } catch (err) {
@@ -139,105 +141,42 @@ function UploadAnalysisPage() {
     }
   };
 
-  // Poll for job status and live counts
-useEffect(() => {
-  if (analyzing && currentJob && !isStreaming) {
-    // For file uploads, set up auto-completion based on video duration
-    let autoCompletionTimer = null;
-    
-    if (videoDuration) {
-      // Set timeout to check completion when video should be done + buffer
-      const expectedTime = (videoDuration + 30) * 1000;
-      autoCompletionTimer = setTimeout(() => {
-        console.log('⏰ Expected completion time reached, checking status...');
-        checkJobStatus(currentJob.job_id);
-      }, expectedTime);
-    }
-
-    // Regular polling
-    pollIntervalRef.current = setInterval(() => {
-      checkJobStatus(currentJob.job_id);
-    }, 2000);
-
-    // Live counts polling
-    countsIntervalRef.current = setInterval(() => {
-      updateLiveCounts(currentJob.job_id);
-    }, 1000);
-
-    return () => {
-      clearInterval(pollIntervalRef.current);
-      clearInterval(countsIntervalRef.current);
-      if (autoCompletionTimer) clearTimeout(autoCompletionTimer);
-    };
-  }
-}, [analyzing, currentJob, isStreaming, videoDuration]);
-
-  // const updateLiveCounts = async (jobId) => {
-  //   try {
-  //     const data = await uploadAnalysisService.getLiveCounts(jobId);
-  //     console.log('📊 Live counts update:', data);
-      
-  //     if (data?.success || data?.data) {
-  //       const countsData = data?.data || data;
-  //       setLiveCounts({
-  //         entries: countsData?.entries || countsData?.IN || 0,
-  //         exits: countsData?.exits || countsData?.OUT || 0
-  //       });
-  //     }
-  //   } catch (err) {
-  //     // Silently fail for live count updates - don't spam console
-  //     console.debug('⚠️ Live count update skipped:', err.message);
-  //   }
-  // };
-
   const updateLiveCounts = async (jobId) => {
-  try {
-    // First try the dedicated live counts endpoint (for streaming)
     try {
-      const data = await uploadAnalysisService.getLiveCounts(jobId);
+      const jobData = await uploadAnalysisService.getJobResults(jobId);
+      const jobInfo = jobData?.data || jobData;
       
-      if (data?.success || data?.data) {
-        const countsData = data?.data || data;
-        const entries = countsData?.entries || countsData?.IN || 0;
-        const exits = countsData?.exits || countsData?.OUT || 0;
+      if (jobInfo?.results) {
+        const parsedResults = parseResults(jobInfo.results);
         
-        setLiveCounts({ entries, exits });
-        return;
+        if (parsedResults) {
+          const entries = parsedResults.entries || parsedResults.detectionsByDirection?.IN || 0;
+          const exits = parsedResults.exits || parsedResults.detectionsByDirection?.OUT || 0;
+          
+          setLiveCounts({ entries, exits });
+        }
       }
-    } catch (streamError) {
-      if (streamError.response?.status !== 404) {
-        console.debug('⚠️ Stream counts endpoint error:', streamError.message);
-      }
+    } catch (err) {
+      // Silent fail for live counts
     }
+  };
 
-    // Fallback: Get counts from job results
-    const jobData = await uploadAnalysisService.getJobResults(jobId);
-    const jobInfo = jobData?.data || jobData;
-    
-    if (jobInfo?.results) {
-      // 🔥 PARSE the results string
-      const parsedResults = parseResults(jobInfo.results);
-      
-      if (parsedResults) {
-        const entries = parsedResults.entries 
-          || parsedResults.detectionsByDirection?.IN 
-          || 0;
-        
-        const exits = parsedResults.exits 
-          || parsedResults.detectionsByDirection?.OUT 
-          || 0;
-        
-        setLiveCounts({ entries, exits });
-      }
-    }
-  } catch (err) {
-    if (!updateLiveCounts.lastErrorLog || Date.now() - updateLiveCounts.lastErrorLog > 60000) {
-      console.debug('⚠️ Live count updates not available yet');
-      updateLiveCounts.lastErrorLog = Date.now();
-    }
-  }
-};
+  useEffect(() => {
+    if (analyzing && currentJob && !isStreaming) {
+      pollIntervalRef.current = setInterval(() => {
+        checkJobStatus(currentJob.job_id);
+      }, 2000);
 
+      countsIntervalRef.current = setInterval(() => {
+        updateLiveCounts(currentJob.job_id);
+      }, 1000);
+
+      return () => {
+        clearInterval(pollIntervalRef.current);
+        clearInterval(countsIntervalRef.current);
+      };
+    }
+  }, [analyzing, currentJob, isStreaming]);
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
@@ -248,7 +187,6 @@ useEffect(() => {
       setCurrentJob(null);
       setLiveCounts({ entries: 0, exits: 0 });
       
-      // Get video duration if it's a video file
       if (file.type.startsWith('video/')) {
         const video = document.createElement('video');
         video.preload = 'metadata';
@@ -273,9 +211,58 @@ useEffect(() => {
     e.preventDefault();
   };
 
+  const startLiveStream = async () => {
+    if (!streamConfig.ip) {
+      setError('Please enter camera IP address');
+      return;
+    }
+
+    try {
+      setError(null);
+      console.log('🎥 Starting live stream with config:', streamConfig);
+      
+      const response = await fetch(`${CAMERA_API_URL}/api/camera/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(streamConfig)
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setLiveStreamId(data.streamId);
+        setLiveStreamActive(true);
+        setStreamUrl(`${CAMERA_API_URL}${data.streamUrl}`);
+        console.log('✅ Live stream started:', data.streamUrl);
+      } else {
+        throw new Error(data.message || 'Failed to start stream');
+      }
+    } catch (err) {
+      console.error('❌ Stream start error:', err);
+      setError(`Failed to start live stream: ${err.message}`);
+    }
+  };
+
+  const stopLiveStream = async () => {
+    if (!liveStreamId) return;
+
+    try {
+      await fetch(`${CAMERA_API_URL}/api/camera/stop/${liveStreamId}`, {
+        method: 'POST'
+      });
+      
+      setLiveStreamActive(false);
+      setLiveStreamId(null);
+      setStreamUrl('');
+      console.log('⏹️ Live stream stopped');
+    } catch (err) {
+      console.error('❌ Error stopping stream:', err);
+    }
+  };
+
   const handleUpload = async () => {
     if (!selectedFile && !streamUrl) {
-      setError('Please select a file or enter a stream URL');
+      setError('Please select a file or configure live stream');
       return;
     }
 
@@ -292,8 +279,8 @@ useEffect(() => {
 
       let response;
 
-      if (streamUrl) {
-        // Start streaming analysis
+      if (streamUrl && liveStreamActive) {
+        // Start streaming analysis using the live stream
         response = await uploadAnalysisService.startStreamAnalysis({
           stream_url: streamUrl,
           camera_id: cameraId
@@ -311,17 +298,13 @@ useEffect(() => {
       }
 
       setCurrentJob(response.data);
-     //console.log('🚀 Job started:', response.data);    
-
       setUploading(false);
       
-      // Start analysis
       if (!streamUrl) {
-  setTimeout(() => handleAnalyze(response.data.job_id), 500);
-} else {
-  // For streams, set analyzing state immediately
-  setAnalyzing(true);
-}
+        setTimeout(() => handleAnalyze(response.data.job_id), 500);
+      } else {
+        setAnalyzing(true);
+      }
 
     } catch (err) {
       console.error('Upload error:', err);
@@ -331,207 +314,157 @@ useEffect(() => {
   };
 
   const handleAnalyze = async (jobId) => {
-  try {
-    // For stream jobs, we don't need to call startAnalysis - they start automatically
-    if (isStreaming) {
-      console.log('📹 Stream analysis started automatically');
+    try {
+      if (isStreaming) {
+        setAnalyzing(true);
+        setError(null);
+        return;
+      }
+
       setAnalyzing(true);
       setError(null);
-      return;
+      setAnalysisProgress(0);
+
+      await uploadAnalysisService.startAnalysis(jobId);
+
+      if (videoDuration) {
+        const progressInterval = setInterval(() => {
+          setAnalysisProgress((prev) => {
+            if (prev >= 100) {
+              clearInterval(progressInterval);
+              return 100;
+            }
+            return prev + (100 / (videoDuration * 2));
+          });
+        }, 500);
+      }
+
+    } catch (err) {
+      console.error('Analysis error:', err);
+      if (!err.message.includes('already processing')) {
+        setError(err.message || 'Failed to start analysis');
+      }
+      setAnalyzing(false);
     }
+  };
 
-    // For file uploads, call startAnalysis
-    setAnalyzing(true);
-    setError(null);
-    setAnalysisProgress(0);
+  const handleStop = async () => {
+    if (!currentJob) return;
 
-    await uploadAnalysisService.startAnalysis(jobId);
-
-    // Set up progress tracking based on video duration
-    if (videoDuration) {
-      const progressInterval = setInterval(() => {
-        setAnalysisProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(progressInterval);
-            return 100;
-          }
-          // More accurate progress based on expected completion time
-          return prev + (100 / (videoDuration * 2));
-        });
-      }, 500);
-    }
-
-  } catch (err) {
-    console.error('Analysis error:', err);
-    if (!err.message.includes('already processing')) {
-      setError(err.message || 'Failed to start analysis');
-    }
-    setAnalyzing(false);
-  }
-};
-
-const handleStop = async () => {
-  if (!currentJob) return;
-
-  try {
-    if (isStreaming) {
-      await uploadAnalysisService.stopStreamAnalysis(currentJob.job_id);
-      setIsStreaming(false);
-    }
-    
-    setAnalyzing(false);
-    setIsPaused(false);
-    clearAllIntervals();
-    
-    // Fetch final results
-    await checkJobStatus(currentJob.job_id);
-    
-  } catch (err) {
-    console.error('Stop error:', err);
-    setError('Failed to stop analysis');
-  }
-};
-
-const handlePause = () => {
-  // Note: This only pauses UI updates, not backend processing
-  // Backend continues processing, we just stop polling
-  
-  if (!isPaused) {
-    // Pausing - stop polling
-    console.log('⏸️ Pausing UI updates (backend still processing)');
-    clearInterval(countsIntervalRef.current);
-    setIsPaused(true);
-  } else {
-    // Resuming - restart polling
-    console.log('▶️ Resuming UI updates');
-    if (currentJob && analyzing) {
-      countsIntervalRef.current = setInterval(() => {
-        updateLiveCounts(currentJob.job_id);
-      }, 1000);
-    }
-    setIsPaused(false);
-  }
-};
-
-const checkJobStatus = async (jobId) => {
-  try {
-    console.log('🔍 Checking job status:', jobId);
-    const data = await uploadAnalysisService.getJobResults(jobId);
-    
-    const jobData = data?.data || data;
-
-    if (jobData.status === 'completed') {
-      console.log('✅ Job completed!', jobData);
-      
-      // Parse the results string
-      const parsedResults = parseResults(jobData.results);
-      
-      if (parsedResults) {
-        // Add processing_time to results
-        parsedResults.processing_time_seconds = jobData.processing_time_seconds;
-        
-        setResults(parsedResults);
-        setAnalyzing(false);
+    try {
+      if (isStreaming) {
+        await uploadAnalysisService.stopStreamAnalysis(currentJob.job_id);
         setIsStreaming(false);
-        setAnalysisProgress(100);
-        
-        // Update final counts
-        const entries = parsedResults.entries 
-          || parsedResults.detectionsByDirection?.IN 
-          || 0;
-        
-        const exits = parsedResults.exits 
-          || parsedResults.detectionsByDirection?.OUT 
-          || 0;
-        
-        console.log('✅ Final counts - Entries:', entries, 'Exits:', exits);
-        setLiveCounts({ entries, exits });
       }
       
-      loadRecentJobs();
-      clearAllIntervals();
-    } else if (jobData.status === 'failed') {
-      console.error('❌ Job failed:', jobData.error_message);
-      setError(jobData.error_message || 'Analysis failed');
       setAnalyzing(false);
-      setIsStreaming(false);
+      setIsPaused(false);
       clearAllIntervals();
-    } else {
-      console.log('⏳ Job still processing:', jobData.status);
       
-      // Update live counts during processing
-      if (jobData.results) {
+      await checkJobStatus(currentJob.job_id);
+      
+    } catch (err) {
+      console.error('Stop error:', err);
+      setError('Failed to stop analysis');
+    }
+  };
+
+  const checkJobStatus = async (jobId) => {
+    try {
+      const data = await uploadAnalysisService.getJobResults(jobId);
+      const jobData = data?.data || data;
+
+      if (jobData.status === 'completed') {
         const parsedResults = parseResults(jobData.results);
+        
         if (parsedResults) {
-          const entries = parsedResults.entries 
-            || parsedResults.detectionsByDirection?.IN 
-            || 0;
+          parsedResults.processing_time_seconds = jobData.processing_time_seconds;
           
-          const exits = parsedResults.exits 
-            || parsedResults.detectionsByDirection?.OUT 
-            || 0;
+          setResults(parsedResults);
+          setAnalyzing(false);
+          setIsStreaming(false);
+          setAnalysisProgress(100);
+          
+          const entries = parsedResults.entries || parsedResults.detectionsByDirection?.IN || 0;
+          const exits = parsedResults.exits || parsedResults.detectionsByDirection?.OUT || 0;
           
           setLiveCounts({ entries, exits });
         }
+        
+        loadRecentJobs();
+        clearAllIntervals();
+      } else if (jobData.status === 'failed') {
+        setError(jobData.error_message || 'Analysis failed');
+        setAnalyzing(false);
+        setIsStreaming(false);
+        clearAllIntervals();
+      } else {
+        if (jobData.results) {
+          const parsedResults = parseResults(jobData.results);
+          if (parsedResults) {
+            const entries = parsedResults.entries || parsedResults.detectionsByDirection?.IN || 0;
+            const exits = parsedResults.exits || parsedResults.detectionsByDirection?.OUT || 0;
+            setLiveCounts({ entries, exits });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('❌ Status check error:', err);
+    }
+  };
+
+  const clearAllIntervals = () => {
+    clearInterval(pollIntervalRef.current);
+    clearInterval(countsIntervalRef.current);
+    pollIntervalRef.current = null;
+    countsIntervalRef.current = null;
+  };
+
+  const parseResults = (results) => {
+    if (!results) return null;
+    if (typeof results === 'object' && !Array.isArray(results)) {
+      return results;
+    }
+    if (typeof results === 'string') {
+      try {
+        return JSON.parse(results);
+      } catch (e) {
+        console.error('Failed to parse results:', e);
+        return null;
       }
     }
-  } catch (err) {
-    console.error('❌ Status check error:', err);
-  }
-};
-
-// Add helper function to clear all intervals
-const clearAllIntervals = () => {
-  clearInterval(pollIntervalRef.current);
-  clearInterval(countsIntervalRef.current);
-  pollIntervalRef.current = null;
-  countsIntervalRef.current = null;
-};
+    return null;
+  };
 
   const viewJobResults = async (jobId) => {
-  try {
-    const data = await uploadAnalysisService.getJobResults(jobId);
-    console.log('📊 View results response:', data);
-    
-    // Handle nested response structure
-    const jobData = data?.data || data;
-    console.log('📊 Job data:', jobData);
+    try {
+      const data = await uploadAnalysisService.getJobResults(jobId);
+      const jobData = data?.data || data;
 
-    if (jobData.status === 'completed') {
-      // 🔥 PARSE the results string
-      const parsedResults = parseResults(jobData.results);
-      console.log('📊 Parsed results:', parsedResults);
-      
-      if (!parsedResults) {
-        setError('Failed to parse job results');
-        return;
+      if (jobData.status === 'completed') {
+        const parsedResults = parseResults(jobData.results);
+        
+        if (!parsedResults) {
+          setError('Failed to parse job results');
+          return;
+        }
+        
+        const entries = parsedResults.entries || parsedResults.detectionsByDirection?.IN || 0;
+        const exits = parsedResults.exits || parsedResults.detectionsByDirection?.OUT || 0;
+        
+        parsedResults.processing_time_seconds = jobData.processing_time_seconds;
+        
+        setResults(parsedResults);
+        setLiveCounts({ entries, exits });
+        setSelectedFile(null);
+        setStreamUrl('');
+        setCurrentJob({ job_id: jobId });
       }
-      
-      // Extract counts
-      const entries = parsedResults.entries 
-        || parsedResults.detectionsByDirection?.IN 
-        || 0;
-      
-      const exits = parsedResults.exits 
-        || parsedResults.detectionsByDirection?.OUT 
-        || 0;
-      
-      console.log('✅ Extracted counts - Entries:', entries, 'Exits:', exits);
-      
-      // Add processing_time to results
-      parsedResults.processing_time_seconds = jobData.processing_time_seconds;
-      
-      setResults(parsedResults);
-      setLiveCounts({ entries, exits });
-      setSelectedFile(null);
-      setStreamUrl('');
-      setCurrentJob({ job_id: jobId });
+    } catch (err) {
+      console.error('Error loading results:', err);
+      setError('Failed to load results');
     }
-  } catch (err) {
-    console.error('Error loading results:', err);
-    setError('Failed to load results');
-  }
-};
+  };
 
   const deleteJob = async (jobId) => {
     if (!confirm('Are you sure you want to delete this job?')) return;
@@ -577,36 +510,13 @@ const clearAllIntervals = () => {
     return date.toLocaleString();
   };
 
-  const parseResults = (results) => {
-  if (!results) return null;
-  
-  // If it's already an object, return it
-  if (typeof results === 'object' && !Array.isArray(results)) {
-    return results;
-  }
-  
-  // If it's a string, parse it
-  if (typeof results === 'string') {
-    try {
-      return JSON.parse(results);
-    } catch (e) {
-      console.error('Failed to parse results:', e);
-      return null;
-    }
-  }
-  
-  return null;
-};
-
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Upload & Analyze</h1>
-        <p className="text-gray-600">Upload videos/images or stream from URL for AI-powered people counting</p>
+        <p className="text-gray-600">Upload videos/images or stream live from camera for AI-powered people counting</p>
       </div>
 
-      {/* Backend Connection Warning */}
       {!backendConnected && (
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -625,7 +535,18 @@ const clearAllIntervals = () => {
         </div>
       )}
 
-      {/* Error Alert */}
+      {!cameraApiConnected && (
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 flex items-start gap-3">
+          <Video className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-blue-900">Camera API Not Connected</p>
+            <p className="text-sm text-blue-700 mt-1">
+              To use live streaming, start the camera API: <code className="bg-blue-100 px-2 py-0.5 rounded">python camera_api.py</code>
+            </p>
+          </div>
+        </div>
+      )}
+
       {error && backendConnected && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
           <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -640,10 +561,9 @@ const clearAllIntervals = () => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Upload Section */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload File or Stream</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload File or Live Stream</h3>
 
             {/* Camera selector */}
             <div className="mb-4">
@@ -691,24 +611,91 @@ const clearAllIntervals = () => {
               </div>
             </div>
 
-            {/* Stream URL Input */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Stream URL (Optional)</label>
-              <input
-                type="text"
-                value={streamUrl}
-                onChange={(e) => setStreamUrl(e.target.value)}
-                placeholder="rtsp://camera-ip:port/stream or http://example.com/video.mp4"
-                className="w-full border rounded-lg px-3 py-2"
-                disabled={!backendConnected || analyzing || !!selectedFile}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Enter a streaming URL to analyze live video or leave empty to upload a file
-              </p>
-            </div>
+            {/* Live Stream Configuration */}
+            {cameraApiConnected && (
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">📹 Live Stream Configuration</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    placeholder="Camera IP (e.g., 192.168.1.64)"
+                    value={streamConfig.ip}
+                    onChange={(e) => setStreamConfig({ ...streamConfig, ip: e.target.value })}
+                    className="col-span-2 border rounded px-3 py-2 text-sm"
+                    disabled={liveStreamActive}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Port"
+                    value={streamConfig.port}
+                    onChange={(e) => setStreamConfig({ ...streamConfig, port: e.target.value })}
+                    className="border rounded px-3 py-2 text-sm"
+                    disabled={liveStreamActive}
+                  />
+                  <select
+                    value={streamConfig.protocol}
+                    onChange={(e) => setStreamConfig({ ...streamConfig, protocol: e.target.value })}
+                    className="border rounded px-3 py-2 text-sm"
+                    disabled={liveStreamActive}
+                  >
+                    <option value="http">HTTP/MJPEG</option>
+                    <option value="rtsp">RTSP</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Username (optional)"
+                    value={streamConfig.username}
+                    onChange={(e) => setStreamConfig({ ...streamConfig, username: e.target.value })}
+                    className="border rounded px-3 py-2 text-sm"
+                    disabled={liveStreamActive}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Password (optional)"
+                    value={streamConfig.password}
+                    onChange={(e) => setStreamConfig({ ...streamConfig, password: e.target.value })}
+                    className="border rounded px-3 py-2 text-sm"
+                    disabled={liveStreamActive}
+                  />
+                </div>
+                <div className="mt-3 flex gap-2">
+                  {!liveStreamActive ? (
+                    <button
+                      onClick={startLiveStream}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                    >
+                      Start Live View
+                    </button>
+                  ) : (
+                    <button
+                      onClick={stopLiveStream}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+                    >
+                      Stop Live View
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
-            {/* Drop Zone - Only show if no stream URL */}
-            {!streamUrl && (
+            {/* Live Stream Display */}
+            {liveStreamActive && streamUrl && (
+              <div className="mb-4 rounded-lg overflow-hidden border-2 border-blue-400">
+                <div className="bg-blue-600 text-white px-3 py-2 text-sm font-medium">
+                  🔴 LIVE STREAM
+                </div>
+                <img 
+                  ref={videoRef}
+                  src={streamUrl} 
+                  alt="Live camera stream"
+                  className="w-full h-auto bg-black"
+                  style={{ maxHeight: '400px', objectFit: 'contain' }}
+                />
+              </div>
+            )}
+
+            {/* File Upload (only show if no live stream) */}
+            {!liveStreamActive && (
               <div
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
@@ -803,14 +790,14 @@ const clearAllIntervals = () => {
             )}
 
             {/* Action Buttons */}
-            {!uploading && !analyzing && !results && (selectedFile || streamUrl) && (
+            {!uploading && !analyzing && !results && (selectedFile || liveStreamActive) && (
               <button
                 onClick={handleUpload}
                 disabled={!cameraId}
                 className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Play className="w-4 h-4" />
-                {streamUrl ? 'Start Stream Analysis' : 'Upload & Analyze'}
+                {liveStreamActive ? 'Start Stream Analysis' : 'Upload & Analyze'}
               </button>
             )}
 
@@ -818,18 +805,11 @@ const clearAllIntervals = () => {
             {analyzing && (
               <div className="mt-4 flex gap-2">
                 <button
-                  onClick={handlePause}
-                  className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Pause className="w-4 h-4" />
-                  {isPaused ? 'Resume' : 'Pause'}
-                </button>
-                <button
                   onClick={handleStop}
                   className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <StopCircle className="w-4 h-4" />
-                  Stop
+                  Stop Analysis
                 </button>
               </div>
             )}
@@ -842,60 +822,60 @@ const clearAllIntervals = () => {
                   {isStreaming ? 'Analyzing live stream...' : 'Analyzing file with AI...'}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {isStreaming ? 'Streaming will continue until stopped' : 'Video will auto-stop when complete'}
+                  {isStreaming ? 'Streaming will continue until stopped' : 'Using Python AI for real people counting'}
                 </p>
               </div>
             )}
 
             {/* Results Section */}
             {results && (
-  <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-    <div className="flex items-center gap-2 mb-4">
-      <CheckCircle className="w-5 h-5 text-green-600" />
-      <h4 className="font-semibold text-green-900">Analysis Complete</h4>
-    </div>
-    
-    <div className="grid grid-cols-2 gap-4 mb-4">
-      <div>
-        <p className="text-sm text-gray-600">Total Detections</p>
-        <p className="text-2xl font-bold text-gray-900">
-          {results?.totalDetections || 0}
-        </p>
-      </div>
-      <div>
-        <p className="text-sm text-gray-600">Net Count</p>
-        <p className="text-2xl font-bold text-gray-900">
-          {results?.netCount || 0}
-        </p>
-      </div>
-      <div>
-        <p className="text-sm text-gray-600">Avg Confidence</p>
-        <p className="text-2xl font-bold text-gray-900">
-          {results?.avgConfidence ? (results.avgConfidence * 100).toFixed(1) : 0}%
-        </p>
-      </div>
-      <div>
-        <p className="text-sm text-gray-600">Processing Time</p>
-        <p className="text-2xl font-bold text-gray-900">
-          {results?.processing_time_seconds || 0}s
-        </p>
-      </div>
-    </div>
+              <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-4">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <h4 className="font-semibold text-green-900">Analysis Complete</h4>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Detections</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {results?.totalDetections || 0}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Net Count</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {results?.netCount || 0}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Avg Confidence</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {results?.avgConfidence ? (results.avgConfidence * 100).toFixed(1) : 0}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Processing Time</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {results?.processing_time_seconds || 0}s
+                    </p>
+                  </div>
+                </div>
 
-    <button
-      onClick={() => {
-        setResults(null);
-        setSelectedFile(null);
-        setStreamUrl('');
-        setCurrentJob(null);
-        setLiveCounts({ entries: 0, exits: 0 });
-      }}
-      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-    >
-      New Analysis
-    </button>
-  </div>
-)}
+                <button
+                  onClick={() => {
+                    setResults(null);
+                    setSelectedFile(null);
+                    setStreamUrl('');
+                    setCurrentJob(null);
+                    setLiveCounts({ entries: 0, exits: 0 });
+                  }}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  New Analysis
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -903,18 +883,35 @@ const clearAllIntervals = () => {
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Connection Status</h3>
-            <div className="flex items-center gap-2 mb-4">
-              <div className={`w-3 h-3 rounded-full ${backendConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span className="text-sm text-gray-700">
-                Backend: {backendConnected ? 'Connected' : 'Disconnected'}
-              </span>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${backendConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                <span className="text-sm text-gray-700">
+                  Backend: {backendConnected ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${cameraApiConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                <span className="text-sm text-gray-700">
+                  Camera API: {cameraApiConnected ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
             </div>
             
             {analyzing && (
               <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                 <p className="text-sm font-medium text-blue-900 mb-1">Analysis Status</p>
                 <p className="text-xs text-blue-700">
-                  {isStreaming ? '🔴 Live Streaming' : '⚡ Processing'}
+                  {isStreaming ? '🔴 Live Streaming' : '⚡ Processing with Python AI'}
+                </p>
+              </div>
+            )}
+
+            {liveStreamActive && (
+              <div className="mt-4 p-3 bg-green-50 rounded-lg">
+                <p className="text-sm font-medium text-green-900 mb-1">Live Stream Active</p>
+                <p className="text-xs text-green-700">
+                  📹 {streamConfig.ip}:{streamConfig.port}
                 </p>
               </div>
             )}
@@ -929,7 +926,7 @@ const clearAllIntervals = () => {
                   <div key={job.job_id} className="border rounded-lg p-3 hover:bg-gray-50">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-900">
-                        {job.input_type === 'video' ? '🎥' : '📷'} Job
+                        {job.input_type === 'video' ? '🎥' : job.input_type === 'stream' ? '📹' : '📷'} Job
                       </span>
                       <span className={`text-xs px-2 py-1 rounded ${
                         job.status === 'completed' ? 'bg-green-100 text-green-700' :

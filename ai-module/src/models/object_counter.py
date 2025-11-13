@@ -1,6 +1,6 @@
 """
-Real-time Object Counter using OpenCV and HOG
-Supports live camera streams, video files, and image capture
+Debug-enabled Object Counter
+Shows real-time detection boxes and tracking info
 """
 import cv2
 import numpy as np
@@ -8,98 +8,75 @@ import json
 import sys
 import os
 from datetime import datetime
-from collections import defaultdict
 import time
-import base64
-import io
 
-class ObjectCounter:
-    def __init__(self, model_type='hog', confidence_threshold=0.5, capture_images=True):
-        """
-        Initialize object counter
-        model_type: 'hog' (built-in) or 'yolo' (requires weights)
-        capture_images: Whether to capture detection images
-        """
-        self.model_type = model_type
+class DebugObjectCounter:
+    def __init__(self, confidence_threshold=0.4, capture_images=True):
+        """Lower confidence threshold for testing"""
         self.confidence_threshold = confidence_threshold
         self.capture_images = capture_images
+        
+        # Tracking
         self.tracking_objects = {}
         self.next_object_id = 0
         self.counted_objects = []
         self.captured_images = []
-        self.line_position = None
         self.crossed_ids = set()
+        
+        # Relaxed tracking parameters
+        self.max_disappeared = 40
+        self.max_distance = 100
+        self.min_hits = 2  # Lower threshold
+        self.counting_zone = None
         self.image_output_dir = None
         
-        # Initialize HOG detector
+        # HOG detector
         self.hog = cv2.HOGDescriptor()
         self.hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
-        self.class_name = 'person'
         
-        # Tracking parameters
-        self.max_disappeared = 30
-        self.max_distance = 50
-    
+        # Debug info
+        self.frame_count = 0
+        self.detection_count = 0
+        self.raw_detections = []
+        
     def detect_objects_hog(self, frame):
-        """Detect people using HOG descriptor"""
+        """Detect with lower threshold and show all detections"""
+        # Detect at multiple scales
         boxes, weights = self.hog.detectMultiScale(
             frame,
-            winStride=(8, 8),
-            padding=(8, 8),
+            winStride=(4, 4),
+            padding=(16, 16),
             scale=1.05,
-            hitThreshold=0.5
+            hitThreshold=0.0  # Very low threshold
         )
         
+        self.raw_detections = []
         detections = []
+        
         for i, (x, y, w, h) in enumerate(boxes):
-            if weights[i] > self.confidence_threshold:
+            confidence = float(weights[i])
+            
+            # Store all raw detections for debugging
+            self.raw_detections.append({
+                'bbox': [int(x), int(y), int(w), int(h)],
+                'confidence': confidence,
+                'accepted': confidence > self.confidence_threshold
+            })
+            
+            if confidence > self.confidence_threshold:
+                cx, cy = int(x + w/2), int(y + h/2)
                 detections.append({
                     'bbox': [int(x), int(y), int(w), int(h)],
-                    'confidence': float(weights[i]),
+                    'confidence': confidence,
                     'class': 'person',
-                    'centroid': (int(x + w/2), int(y + h/2))
+                    'centroid': (cx, cy)
                 })
+                self.detection_count += 1
         
         return detections
     
-    def capture_detection_image(self, frame, object_id, bbox, timestamp):
-        """Capture and save detection image"""
-        try:
-            x, y, w, h = bbox
-            
-            # Add padding
-            padding = 20
-            x1 = max(0, x - padding)
-            y1 = max(0, y - padding)
-            x2 = min(frame.shape[1], x + w + padding)
-            y2 = min(frame.shape[0], y + h + padding)
-            
-            # Crop detection
-            detection_img = frame[y1:y2, x1:x2]
-            
-            if detection_img.size == 0:
-                return None
-            
-            # Save image if directory specified
-            image_path = None
-            if self.image_output_dir:
-                os.makedirs(self.image_output_dir, exist_ok=True)
-                filename = f"detection_{object_id}_{timestamp.replace(':', '-').replace('.', '_')}.jpg"
-                image_path = os.path.join(self.image_output_dir, filename)
-                cv2.imwrite(image_path, detection_img)
-            
-            return {
-                'path': image_path,
-                'filename': filename if image_path else None,
-                'width': detection_img.shape[1],
-                'height': detection_img.shape[0]
-            }
-        except Exception as e:
-            print(f"Error capturing image: {e}")
-            return None
-    
     def update_tracking(self, detections, frame=None):
-        """Update object tracking and count crossings"""
+        """Track with relaxed parameters"""
         if len(detections) == 0:
             for obj_id in list(self.tracking_objects.keys()):
                 self.tracking_objects[obj_id]['disappeared'] += 1
@@ -107,13 +84,12 @@ class ObjectCounter:
                     del self.tracking_objects[obj_id]
             return []
         
-        input_centroids = np.array([d['centroid'] for d in detections])
-        
         if len(self.tracking_objects) == 0:
             for detection in detections:
                 self.register_object(detection)
         else:
             object_ids = list(self.tracking_objects.keys())
+            input_centroids = np.array([d['centroid'] for d in detections])
             object_centroids = np.array([self.tracking_objects[oid]['centroid'] for oid in object_ids])
             
             distances = np.linalg.norm(object_centroids[:, np.newaxis] - input_centroids, axis=2)
@@ -124,7 +100,7 @@ class ObjectCounter:
             used_rows = set()
             used_cols = set()
             
-            for (row, col) in zip(rows, cols):
+            for row, col in zip(rows, cols):
                 if row in used_rows or col in used_cols:
                     continue
                 
@@ -137,10 +113,19 @@ class ObjectCounter:
                 
                 self.tracking_objects[object_id]['centroid'] = new_centroid
                 self.tracking_objects[object_id]['bbox'] = detections[col]['bbox']
+                self.tracking_objects[object_id]['confidence'] = detections[col]['confidence']
                 self.tracking_objects[object_id]['disappeared'] = 0
+                self.tracking_objects[object_id]['hits'] += 1
                 self.tracking_objects[object_id]['last_seen'] = datetime.now()
                 
-                if self.line_position is not None:
+                # Track trajectory
+                if 'trajectory' not in self.tracking_objects[object_id]:
+                    self.tracking_objects[object_id]['trajectory'] = []
+                self.tracking_objects[object_id]['trajectory'].append(new_centroid)
+                
+                # Check crossing
+                if (self.tracking_objects[object_id]['hits'] >= self.min_hits and 
+                    self.counting_zone is not None and frame is not None):
                     self.check_line_crossing(object_id, old_centroid, new_centroid, frame)
                 
                 used_rows.add(row)
@@ -160,111 +145,212 @@ class ObjectCounter:
         return list(self.tracking_objects.keys())
     
     def register_object(self, detection):
-        """Register a new tracked object"""
+        """Register new object"""
         self.tracking_objects[self.next_object_id] = {
             'centroid': detection['centroid'],
             'bbox': detection['bbox'],
             'class': detection['class'],
             'confidence': detection['confidence'],
             'disappeared': 0,
+            'hits': 1,
             'first_seen': datetime.now(),
-            'last_seen': datetime.now()
+            'last_seen': datetime.now(),
+            'crossed': False,
+            'trajectory': [detection['centroid']]
         }
         self.next_object_id += 1
     
-    def check_line_crossing(self, object_id, old_centroid, new_centroid, frame=None):
-        """Check if object crossed the counting line"""
-        if object_id in self.crossed_ids:
+    def check_line_crossing(self, object_id, old_centroid, new_centroid, frame):
+        """Check with minimal hysteresis"""
+        if self.tracking_objects[object_id]['crossed']:
             return
         
         old_y = old_centroid[1]
         new_y = new_centroid[1]
         
-        if (old_y < self.line_position <= new_y) or (old_y > self.line_position >= new_y):
-            direction = 'DOWN' if new_y > old_y else 'UP'
-            self.crossed_ids.add(object_id)
-            
-            timestamp = datetime.now().isoformat()
-            
-            # Capture image if enabled
-            captured_image = None
-            if self.capture_images and frame is not None:
-                captured_image = self.capture_detection_image(
-                    frame, 
-                    object_id, 
-                    self.tracking_objects[object_id]['bbox'],
-                    timestamp
-                )
-            
-            count_event = {
-                'object_id': object_id,
-                'class': self.tracking_objects[object_id]['class'],
-                'direction': direction,
-                'timestamp': timestamp,
-                'confidence': self.tracking_objects[object_id]['confidence'],
-                'position': new_centroid,
-                'captured_image': captured_image
-            }
-            self.counted_objects.append(count_event)
-            
-            if captured_image:
-                self.captured_images.append(captured_image)
-            
-            print(f"✓ Object {object_id} crossed line going {direction} - Image captured: {captured_image is not None}")
+        # Smaller hysteresis for easier counting
+        hysteresis = 5
+        
+        if old_y < self.counting_zone - hysteresis and new_y > self.counting_zone + hysteresis:
+            self.record_crossing(object_id, 'DOWN', new_centroid, frame)
+        elif old_y > self.counting_zone + hysteresis and new_y < self.counting_zone - hysteresis:
+            self.record_crossing(object_id, 'UP', new_centroid, frame)
     
-    def process_frame(self, frame, draw=True):
-        """Process a single frame"""
-        detections = self.detect_objects_hog(frame)
-        tracked_ids = self.update_tracking(detections, frame)
+    def record_crossing(self, object_id, direction, centroid, frame):
+        """Record counting event"""
+        self.tracking_objects[object_id]['crossed'] = True
+        self.crossed_ids.add(object_id)
+        timestamp = datetime.now().isoformat()
         
-        if draw:
-            frame = self.draw_results(frame)
+        captured_image = None
+        if self.capture_images and frame is not None:
+            captured_image = self.capture_detection_image(
+                frame, object_id, self.tracking_objects[object_id]['bbox'], timestamp
+            )
         
-        return frame, len(tracked_ids), len(self.counted_objects)
+        count_event = {
+            'object_id': object_id,
+            'class': 'person',
+            'direction': direction,
+            'timestamp': timestamp,
+            'confidence': self.tracking_objects[object_id]['confidence'],
+            'position': centroid,
+            'captured_image': captured_image
+        }
+        self.counted_objects.append(count_event)
+        
+        if captured_image:
+            self.captured_images.append(captured_image)
+        
+        print(f"*** COUNTED *** Person {object_id} crossed {direction} | Total: {len(self.counted_objects)}")
+    
+    def capture_detection_image(self, frame, object_id, bbox, timestamp):
+        """Capture image"""
+        try:
+            x, y, w, h = bbox
+            padding = 20
+            
+            x1 = max(0, x - padding)
+            y1 = max(0, y - padding)
+            x2 = min(frame.shape[1], x + w + padding)
+            y2 = min(frame.shape[0], y + h + padding)
+            
+            detection_img = frame[y1:y2, x1:x2]
+            
+            if detection_img.size == 0:
+                return None
+            
+            image_path = None
+            filename = None
+            if self.image_output_dir:
+                os.makedirs(self.image_output_dir, exist_ok=True)
+                filename = f"person_{object_id}_{timestamp.replace(':', '-').replace('.', '_')}.jpg"
+                image_path = os.path.join(self.image_output_dir, filename)
+                cv2.imwrite(image_path, detection_img)
+            
+            return {
+                'path': image_path,
+                'filename': filename,
+                'width': detection_img.shape[1],
+                'height': detection_img.shape[0]
+            }
+        except Exception as e:
+            return None
     
     def draw_results(self, frame):
-        """Draw bounding boxes and counting line on frame"""
+        """Draw with extensive debug info"""
         height, width = frame.shape[:2]
         
-        if self.line_position is None:
-            self.line_position = height // 2
+        # Set counting line lower for entrance scenarios
+        if self.counting_zone is None:
+            self.counting_zone = int(height * 0.65)  # 65% from top
         
-        # Draw counting line
-        cv2.line(frame, (0, self.line_position), (width, self.line_position), (0, 255, 255), 2)
-        cv2.putText(frame, 'COUNTING LINE', (10, self.line_position - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        # Draw counting zone
+        cv2.line(frame, (0, self.counting_zone), (width, self.counting_zone), (0, 255, 255), 3)
+        cv2.line(frame, (0, self.counting_zone - 5), (width, self.counting_zone - 5), (0, 200, 200), 1)
+        cv2.line(frame, (0, self.counting_zone + 5), (width, self.counting_zone + 5), (0, 200, 200), 1)
         
-        # Draw tracked objects
+        # Draw ALL raw detections in red (including rejected ones)
+        for det in self.raw_detections:
+            x, y, w, h = det['bbox']
+            color = (0, 255, 0) if det['accepted'] else (0, 0, 255)  # Green if accepted, Red if rejected
+            thickness = 2 if det['accepted'] else 1
+            cv2.rectangle(frame, (x, y), (x + w, y + h), color, thickness)
+            
+            conf_text = f"{det['confidence']:.2f}"
+            cv2.putText(frame, conf_text, (x, y - 5),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+        
+        # Draw tracked objects with trajectory
         for obj_id, obj in self.tracking_objects.items():
             x, y, w, h = obj['bbox']
-            centroid = obj['centroid']
+            cx, cy = obj['centroid']
             
-            color = (0, 255, 0) if obj_id in self.crossed_ids else (255, 0, 0)
+            # Color based on status
+            if obj_id in self.crossed_ids:
+                color = (0, 255, 0)  # Green - COUNTED
+                status = "COUNTED"
+            elif obj['hits'] >= self.min_hits:
+                color = (255, 165, 0)  # Orange - TRACKING
+                status = f"TRACK ({obj['hits']})"
+            else:
+                color = (255, 255, 0)  # Yellow - DETECTING
+                status = f"DETECT ({obj['hits']})"
             
-            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-            cv2.circle(frame, centroid, 4, color, -1)
+            # Draw bounding box
+            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 3)
+            cv2.circle(frame, (cx, cy), 6, color, -1)
             
-            label = f"ID: {obj_id}"
-            cv2.putText(frame, label, (x, y - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            # Draw trajectory
+            if 'trajectory' in obj and len(obj['trajectory']) > 1:
+                points = np.array(obj['trajectory'], dtype=np.int32)
+                cv2.polylines(frame, [points], False, color, 2)
+            
+            # Draw label with more info
+            label = f"ID:{obj_id} {status}"
+            distance_to_line = abs(cy - self.counting_zone)
+            label2 = f"Conf:{obj['confidence']:.2f} Dist:{distance_to_line}px"
+            
+            # Background for label
+            label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+            cv2.rectangle(frame, (x, y - 40), (x + max(label_size[0], 200), y), (0, 0, 0), -1)
+            
+            cv2.putText(frame, label, (x + 5, y - 25),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            cv2.putText(frame, label2, (x + 5, y - 8),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
         
-        # Draw counts
-        count_text = f"Total: {len(self.counted_objects)} | Active: {len(self.tracking_objects)} | Images: {len(self.captured_images)}"
-        cv2.putText(frame, count_text, (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        # Draw comprehensive stats panel
+        self.draw_debug_panel(frame)
         
         return frame
     
+    def draw_debug_panel(self, frame):
+        """Draw debug statistics"""
+        height, width = frame.shape[:2]
+        panel_height = 160
+        
+        # Semi-transparent background
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (0, 0), (width, panel_height), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
+        
+        # Statistics
+        stats = [
+            f"PEOPLE COUNTED: {len(self.counted_objects)}",
+            f"Currently Tracking: {len(self.tracking_objects)}",
+            f"Raw Detections: {len(self.raw_detections)}",
+            f"Total Detections: {self.detection_count}",
+            f"Frame: {self.frame_count}"
+        ]
+        
+        y_offset = 25
+        for i, stat in enumerate(stats):
+            if i == 0:
+                color = (0, 255, 255)
+                size = 0.8
+            else:
+                color = (255, 255, 255)
+                size = 0.6
+            
+            cv2.putText(frame, stat, (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, size, color, 2)
+            y_offset += 28
+        
+        # Legend
+        legend_y = panel_height - 30
+        cv2.putText(frame, "Red=Rejected | Green=Accepted | Yellow=Detecting | Orange=Tracking",
+                   (10, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+    
     def process_video(self, video_source, output_path=None, image_output_dir=None):
-        """Process video from file or camera stream"""
+        """Process video with debug output"""
         self.image_output_dir = image_output_dir
         
         cap = cv2.VideoCapture(video_source)
-        
         if not cap.isOpened():
             return {'error': f'Cannot open video source: {video_source}'}
         
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -274,141 +360,124 @@ class ObjectCounter:
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         
-        frame_count = 0
         start_time = time.time()
         
-        print(f"Processing video: {width}x{height} @ {fps}fps, {total_frames} frames")
-        if self.capture_images:
-            print(f"Image capture enabled - saving to: {self.image_output_dir or 'memory only'}")
+        print(f"[DEBUG] Video: {width}x{height} @ {fps}fps")
+        print(f"[DEBUG] Confidence threshold: {self.confidence_threshold}")
+        print(f"[DEBUG] Min hits for counting: {self.min_hits}")
+        print(f"[DEBUG] Counting line will be at: {int(height * 0.65)}px (65% from top)")
+        print("-" * 60)
         
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
             
-            processed_frame, active_count, total_count = self.process_frame(frame, draw=True)
+            self.frame_count += 1
+            
+            # Detect and track
+            detections = self.detect_objects_hog(frame)
+            self.update_tracking(detections, frame)
+            
+            # Draw debug visualization
+            output_frame = self.draw_results(frame)
             
             if writer:
-                writer.write(processed_frame)
+                writer.write(output_frame)
             
-            frame_count += 1
-            
-            if frame_count % (fps * 5) == 0:
+            # Detailed progress
+            if self.frame_count % (fps * 2) == 0:  # Every 2 seconds
                 elapsed = time.time() - start_time
-                progress = (frame_count / total_frames * 100) if total_frames > 0 else 0
-                print(f"Progress: {frame_count}/{total_frames} ({progress:.1f}%) - "
-                      f"Count: {total_count} - Images: {len(self.captured_images)} - Time: {elapsed:.1f}s")
+                progress = (self.frame_count / total_frames * 100) if total_frames > 0 else 0
+                print(f"[Frame {self.frame_count:5d}] Progress: {progress:5.1f}% | "
+                      f"Detections: {len(detections)} | Tracking: {len(self.tracking_objects)} | "
+                      f"Counted: {len(self.counted_objects)} | Time: {elapsed:.1f}s")
         
         cap.release()
         if writer:
             writer.release()
         
+        processing_time = time.time() - start_time
+        
+        # Final statistics
+        up_count = sum(1 for obj in self.counted_objects if obj['direction'] == 'UP')
+        down_count = sum(1 for obj in self.counted_objects if obj['direction'] == 'DOWN')
+        
+        print("\n" + "=" * 60)
+        print(f"FINAL RESULTS:")
+        print(f"  Total People Counted: {len(self.counted_objects)}")
+        print(f"  Direction - DOWN (entering): {down_count}")
+        print(f"  Direction - UP (exiting): {up_count}")
+        print(f"  Net count: {down_count - up_count}")
+        print(f"  Total frames processed: {self.frame_count}")
+        print(f"  Total detections made: {self.detection_count}")
+        print(f"  Processing time: {processing_time:.1f}s")
+        print("=" * 60)
+        
         results = {
             'total_counted': len(self.counted_objects),
-            'frames_processed': frame_count,
+            'direction_counts': {
+                'UP': up_count,
+                'DOWN': down_count,
+                'net': down_count - up_count
+            },
+            'frames_processed': self.frame_count,
+            'total_detections': self.detection_count,
             'images_captured': len(self.captured_images),
             'detections': self.counted_objects,
-            'processing_time': time.time() - start_time,
+            'processing_time': processing_time,
             'video_info': {
                 'width': width,
                 'height': height,
                 'fps': fps,
                 'total_frames': total_frames
-            },
-            'image_output_directory': self.image_output_dir
+            }
         }
         
         return results
 
+
 def main():
-    """Main entry point for command-line usage"""
     if len(sys.argv) < 2:
-        print(json.dumps({'error': 'Usage: python object_counter.py <video_path> [output_path] [--images <image_dir>] [--model <hog>]'}))
+        print(json.dumps({
+            'error': 'Usage: python debug_counter.py <video_path> [output_path] [--images <dir>] [--confidence <0.4>]'
+        }))
         sys.exit(1)
     
     video_path = sys.argv[1]
     output_path = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith('--') else None
     
-    # Parse arguments
     image_dir = None
-    model_type = 'hog'
-    capture_images = True
+    confidence = 0.4  # Lower for testing
     
     i = 2 if output_path else 1
     while i < len(sys.argv):
         if sys.argv[i] == '--images' and i + 1 < len(sys.argv):
             image_dir = sys.argv[i + 1]
             i += 2
-        elif sys.argv[i] == '--model' and i + 1 < len(sys.argv):
-            model_type = sys.argv[i + 1]
+        elif sys.argv[i] == '--confidence' and i + 1 < len(sys.argv):
+            confidence = float(sys.argv[i + 1])
             i += 2
-        elif sys.argv[i] == '--no-images':
-            capture_images = False
-            i += 1
         else:
             i += 1
     
     if not os.path.exists(video_path):
-        print(json.dumps({'error': f'Video file not found: {video_path}'}))
+        print(json.dumps({'error': f'Video not found: {video_path}'}))
         sys.exit(1)
     
     try:
-        counter = ObjectCounter(
-            model_type=model_type, 
-            confidence_threshold=0.5,
-            capture_images=capture_images
+        counter = DebugObjectCounter(
+            confidence_threshold=confidence,
+            capture_images=image_dir is not None
         )
         results = counter.process_video(video_path, output_path, image_dir)
         print(json.dumps(results, default=str))
     except Exception as e:
-        print(json.dumps({'error': f'Processing failed: {str(e)}'}))
+        print(json.dumps({'error': f'Failed: {str(e)}'}))
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
-
-# Fix Windows console encoding issues
-if sys.platform == 'win32':
-    # Force UTF-8 encoding for stdout/stderr
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-
-# Alternative: Replace special characters with ASCII equivalents
-def safe_print(text):
-    """Print text safely by replacing non-ASCII characters"""
-    # Replace common Unicode characters with ASCII equivalents
-    replacements = {
-        '✓': '[OK]',
-        '✗': '[X]',
-        '→': '->',
-        '←': '<-',
-        '↑': '^',
-        '↓': 'v',
-        '•': '*',
-        '…': '...',
-    }
-    
-    for unicode_char, ascii_char in replacements.items():
-        text = text.replace(unicode_char, ascii_char)
-    
-    try:
-        print(text)
-    except UnicodeEncodeError:
-        # If still fails, remove all non-ASCII characters
-        print(text.encode('ascii', 'ignore').decode('ascii'))
-
-# Example usage - replace your print statements with safe_print:
-# Before: print("✓ Processing complete")
-# After:  safe_print("[OK] Processing complete")
-# Or:     print("[OK] Processing complete")  # Just use ASCII characters
-
-"""
-RECOMMENDED: Simply replace all Unicode characters in your print statements with ASCII:
-- Replace ✓ with [OK] or [SUCCESS]
-- Replace ✗ with [X] or [FAILED]
-- Replace → with ->
-etc.
-
-This is the simplest and most reliable solution.
-"""
 
 if __name__ == '__main__':
     main()
