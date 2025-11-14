@@ -17,6 +17,7 @@ import ProductOverviewPage from './pages/ProductOverviewPage';
 import ProductCatalogPage from './pages/ProductCatalogPage';
 import ProductDetectionLogsPage from './pages/ProductDetectionLogsPage';
 import ProductAnalyticsPage from './pages/ProductAnalyticsPage';
+import FireDetectionPage from './smokepages/FireDetectionPage';
 
 // Admin Pages
 import AdminLoginPage from './adminPages/AdminLoginPage';
@@ -152,9 +153,10 @@ function App() {
           <Route path="object-counter" element={<ObjectCounterPage />} />
           
           {/* Smoke Alert Module */}
-          <Route path="smoke-detection" element={<div>Smoke Detection Page</div>} />
+          <Route path="smoke-detection" element={<FireDetectionPage/>} />
           <Route path="smoke-alerts" element={<div>Smoke Alerts Page</div>} />
           <Route path="smoke-analytics" element={<div>Smoke Analytics Page</div>} />
+          <Route path="/fire-detection" element={<FireDetectionPage />} />
           
           {/* Product Detection Module */}
           <Route path="product-overview" element={<ProductOverviewPage />} />
