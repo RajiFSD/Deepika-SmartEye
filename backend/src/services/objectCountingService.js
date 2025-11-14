@@ -15,8 +15,9 @@ class ObjectCountingService {
   this.activeProcesses = new Map();
 
   // ✅ Cross-platform safe Python script path
+ // this.pythonScript = path.resolve(__dirname, "../../../ai-module/src/models/object_counter.py");
   this.pythonScript = path.resolve(__dirname, "../../../ai-module/src/models/object_counter.py");
-
+  console.log('✅ Using Python script path:', this.pythonScript);
   if (!fsSync.existsSync(this.pythonScript)) {
     console.warn("⚠️ Python script not found at:", this.pythonScript);
   } else {
@@ -212,7 +213,7 @@ console.log(`Found ${jobs.count} jobs matching filters`);
 
       console.log('🐍 Running Python with args:', args);
 
-      const pythonProcess = spawn('python', args);
+      const pythonProcess = spawn('python3', args);
       this.activeProcesses.set(jobId, pythonProcess);
 
       let stdout = '';
