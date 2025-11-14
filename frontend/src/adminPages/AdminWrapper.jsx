@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Users, LogOut, Menu, X, Building2, UserSquare2, Camera, 
@@ -9,8 +8,7 @@ function AdminWrapper({ setIsAdminAuth }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // ✅ Initialize user with default role
+    // ✅ Initialize user with default role
   const [user, setUser] = useState(() => {
     const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
     
@@ -21,15 +19,17 @@ function AdminWrapper({ setIsAdminAuth }) {
   const userRole = user.role || 'viewer';
   const [menuItems, setMenuItems] = useState([]);
   
+  // ✅ Active path checker
+  const isActive = (path) => location.pathname === path;
 
-  // ✅ Handle logout
-  const handleLogout = () => {
-    setIsAdminAuth(false);
-    authService.logout();
-    navigate('/admin/login');
-  };
+  useEffect(() => {
+  const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
+  if (adminUser?.role) {
+    setUser(adminUser);
+  }
+}, []);
 
-  // 🎯 Define all possible menu items
+    // 🎯 Define all possible menu items
   const allMenuItems = [
     { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'admin', 'manager', 'viewer'] },
     { path: '/admin/users', icon: Users, label: 'User Management', roles: ['super_admin', 'admin'] },
@@ -38,11 +38,27 @@ function AdminWrapper({ setIsAdminAuth }) {
     { path: '/admin/cameras', icon: Camera, label: 'Cameras', roles: ['super_admin', 'admin', 'manager'] },
     { path: '/admin/payments', icon: CreditCard, label: 'Payment Plans', roles: ['super_admin'] },
     { path: '/admin/subscriptions', icon: Layers, label: 'Subscriptions', roles: ['super_admin'] },
+    { path: '/admin/product-master', icon: Layers, label: 'Product Master', roles: ['super_admin', 'admin'] },
+    { path: '/admin/product-config', icon: Layers, label: 'Product Config', roles: ['super_admin', 'admin'] },
+    { path: '/admin/product-tenant-mapping', icon: Layers, label: 'Product Tenant Mapping', roles: ['super_admin', 'admin'] },
 
   ];
 
-  // ✅ Active path checker
-  const isActive = (path) => location.pathname === path;
+  // ✅ Filter and set menu items dynamically by role
+useEffect(() => {
+  if (userRole) {
+    const filtered = allMenuItems.filter(item => item.roles.includes(userRole.toLowerCase()));
+    setMenuItems(filtered);
+  }
+}, [userRole]);
+  
+
+  // ✅ Handle logout
+  const handleLogout = () => {
+    setIsAdminAuth(false);
+    authService.logout();
+    navigate('/admin/login');
+  };
 
   // ✅ Menu item component
   const MenuItem = ({ label, path, Icon }) => (
@@ -84,28 +100,19 @@ function AdminWrapper({ setIsAdminAuth }) {
           {/* Navigation */}
           <nav className="flex-1 px-4 py-4 overflow-y-auto">
             <div className="space-y-1">
-              {menuItems.length > 0 ? (
-                menuItems.map((item) => (
-                  <MenuItem
-                    key={item.screen_name}
-                    label={item.screen_name}
-                    path={item.path || '/admin/dashboard'}
-                    Icon={
-                      item.icon === 'Users'
-                        ? Users
-                        : item.icon === 'Building2'
-                        ? Building2
-                        : item.icon === 'Camera'
-                        ? Camera
-                        : item.icon === 'Shield'
-                        ? Shield
-                        : LayoutDashboard
-                    }
-                  />
-                ))
-              ) : (
-                <p className="text-gray-400 text-sm px-4">No menu available</p>
-              )}
+{menuItems.length > 0 ? (
+  menuItems.map((item) => (
+    <MenuItem
+      key={item.path}
+      label={item.label}
+      path={item.path}
+      Icon={item.icon}
+    />
+  ))
+) : (
+  <p className="text-gray-400 text-sm px-4">No menu available</p>
+)}
+
             </div>
           </nav>
 

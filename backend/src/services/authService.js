@@ -64,7 +64,6 @@ class AuthService {
           username: user.username,
           email: user.email,
           full_name: user.full_name,
-          branch_id: user.branch_id,
           role_id: user.role_id,
           role: roleInfo?.role_name || null, // ✅ Return role name string
           role_details: roleInfo, // ✅ Full role object with screens

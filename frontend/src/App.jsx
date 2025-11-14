@@ -29,6 +29,11 @@ import CameraManagementPage from './adminPages/CameraManagementPage';
 import PaymentPlansPage from './adminPages/PaymentPlansPage';
 import SubscriptionsPage from './adminPages/SubscriptionsPage';
 
+//Product - Config - Tenant
+import ProductMasterPage from './adminPages/ProductMasterPage';
+import ProductConfigPage from './adminPages/ProductConfigPage';
+import ProductTenantMappingPage from './adminPages/ProductTenantMappingPage';
+
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -156,11 +161,12 @@ function App() {
           <Route path="product-catalog" element={<ProductCatalogPage />} />
           <Route path="product-detection" element={<ProductDetectionLogsPage />} />
           <Route path="product-analytics" element={<ProductAnalyticsPage />} />
-          
+          <Route path="product-master" element={<ProductMasterPage />} />
+          <Route path="product-config" element={<ProductConfigPage />} />
+          <Route path="product-tenant-mapping" element={<ProductTenantMappingPage />} />
           {/* System */}
           <Route path="reports" element={<ReportsPage />} />
         </Route>
-
         {/* ==================== FALLBACK ROUTE ==================== */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

@@ -78,6 +78,16 @@ function PluginWrapper({ setIsAuthenticated }) {
       ]
     },
     {
+      id: 'productMaster',
+      icon: Package,
+      label: 'Product Master',
+      items: [
+        { path: '/product-master', icon: Package, label: 'New Product' },
+        { path: '/product-config', icon: Settings, label: 'Configuration' },
+        { path: '/product-tenant-mapping', icon: Building2, label: 'Tenant Mapping' }
+      ]
+    },
+    {
       id: 'objectCounter',
       icon: Shield,
       label: 'Object Counting',

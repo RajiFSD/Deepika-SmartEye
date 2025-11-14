@@ -42,6 +42,35 @@ const adminService = {
     throw error.response?.data?.message || 'Failed to fetch users for tenant';
   }
 },
+// Get all users by tenant id and branch id
+getUsersbyBranchId: async (params = {}) => {
+  try {
+    const {
+      page = 1,
+      limit = 100,
+      search = '',
+      role = '',
+      tenantId = '',
+      branchId = ''
+    } = params;
+
+    const queryParams = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+      ...(search && { search }),
+      ...(role && { role }),
+      ...(tenantId && { tenantId }),   
+      ...(branchId && { branchId }),   
+    });
+
+    const response = await api.get(`/admin/users?${queryParams}`);
+
+    return response.data;
+  } catch (error) {
+    console.error('❌ Error fetching users:', error);
+    throw error.response?.data?.message || error.message || 'Failed to fetch users';
+  }
+},
 
     // ✅ NEW: Get user count by tenant ID
   getUserCountByTenantId: async (tenantId) => {

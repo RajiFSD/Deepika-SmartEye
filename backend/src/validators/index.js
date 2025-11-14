@@ -466,6 +466,7 @@ const productValidator = {
   create: Joi.object({
     product_name: commonValidators.name.required(),
     product_type: Joi.string().max(100).optional().allow(""),
+    yolo_name: Joi.string().max(100).optional().allow(""),
     size: Joi.string().max(100).optional().allow(""),
     description: Joi.string().optional().allow(""),
     uom: Joi.string().max(50).optional().allow(""),
@@ -473,6 +474,7 @@ const productValidator = {
   update: Joi.object({
     product_name: commonValidators.name.optional(),
     product_type: Joi.string().max(100).optional(),
+    yolo_name: Joi.string().max(100).optional(),
     size: Joi.string().max(100).optional(),
     description: Joi.string().optional(),
     uom: Joi.string().max(50).optional(),

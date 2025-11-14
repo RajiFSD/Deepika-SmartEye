@@ -250,61 +250,15 @@ class UploadAnalysisService {
   async saveDetectionsAndComplete(job, detections, startTime) {
     const savedDetections = [];
     
-    // Get branch_id from camera if available
-    let branch_id = null;
-    if (job.camera_id) {
-      const camera = await Camera.findByPk(job.camera_id);
-      branch_id = camera ? camera.branch_id : null;
-    }
-    
-    // If still null, we need a default branch or fail gracefully
-    if (!branch_id) {
-      throw new Error('Cannot save detections: branch_id is required. Please ensure the camera is associated with a branch.');
-    }
-    
-    // Get the video start time as a base for all detection times
-    const videoStartTime = new Date();
-    
     for (const detection of detections) {
-      // ✅ Parse detection_time correctly
-      let detectionTime;
-      
-      if (detection.detection_time instanceof Date) {
-        detectionTime = detection.detection_time;
-      } else if (typeof detection.detection_time === 'string') {
-        // Handle timestamp format from Python like "0:00:05.166667"
-        const timestampMatch = detection.detection_time.match(/(\d+):(\d+):([\d.]+)/);
-        if (timestampMatch) {
-          const hours = parseInt(timestampMatch[1]);
-          const minutes = parseInt(timestampMatch[2]);
-          const seconds = parseFloat(timestampMatch[3]);
-          
-          // Calculate milliseconds offset from video start
-          const offsetMs = (hours * 3600 + minutes * 60 + seconds) * 1000;
-          detectionTime = new Date(videoStartTime.getTime() + offsetMs);
-        } else {
-          // Try to parse as ISO date string
-          detectionTime = new Date(detection.detection_time);
-          
-          // If invalid, use current time
-          if (isNaN(detectionTime.getTime())) {
-            console.warn(`⚠️ Invalid detection_time: ${detection.detection_time}, using current time`);
-            detectionTime = new Date();
-          }
-        }
-      } else {
-        // Default to current time if no valid time provided
-        detectionTime = new Date();
-      }
-      
       const log = await PeopleCountLog.create({
         camera_id: job.camera_id,
         tenant_id: job.tenant_id,
-        branch_id: branch_id, // ✅ Now it has a valid branch_id
-        zone_id: detection.zone_id || null,
+        branch_id: detection.branch_id,
+        zone_id: detection.zone_id,
         person_id: detection.person_id,
         direction: detection.direction,
-        detection_time: detectionTime, // ✅ Now it's a valid Date object
+        detection_time: detection.detection_time,
         frame_number: detection.frame_number,
         confidence_score: detection.confidence_score,
         image_path: detection.image_path,
@@ -312,8 +266,7 @@ class UploadAnalysisService {
         metadata: {
           ...detection.metadata,
           job_id: job.job_id,
-          source: 'upload_analysis',
-          original_timestamp: detection.detection_time // Keep original for reference
+          source: 'upload_analysis'
         },
         created_at: new Date()
       });
