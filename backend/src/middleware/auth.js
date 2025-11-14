@@ -1,34 +1,6 @@
 const jwt = require('jsonwebtoken');
 const ResponseHandler = require('@utils/responseHandler');
 
-/**
- * Middleware to authenticate JWT token
- */
-// const authenticateToken = (req, res, next) => {
-//   try {
-//     const authHeader = req.headers['authorization'];
-//     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-//     if (!token) {
-//       return ResponseHandler.unauthorized(res, 'Access token required');
-//     }
-
-//     jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-//       if (err) {
-//         console.error('JWT verification error:', err.message);
-//         return ResponseHandler.unauthorized(res, 'Invalid or expired token');
-//       }
-
-//       // ✅ Attach decoded token data to request
-//       req.user = decoded;
-//       console.log('✅ Authenticated user:', decoded.email, 'Role:', decoded.role);
-//       next();
-//     });
-//   } catch (error) {
-//     console.error('Authentication error:', error);
-//     return ResponseHandler.unauthorized(res, 'Authentication failed');
-//   }
-// };
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -52,7 +24,7 @@ const authenticateToken = (req, res, next) => {
       return res.status(403).json({ message: 'Invalid or expired token' });
     }
     
-    console.log('✅ Token verified for user:', user.userId);
+    //console.log('✅ Token verified for user:', user.userId);
     req.user = user;
     next();
   });

@@ -84,11 +84,14 @@ function UploadAnalysisPage() {
 
   const checkCameraApiConnection = async () => {
     try {
-      const response = await fetch(`${CAMERA_API_URL}/api/health`);
+      // Remove /api prefix since CAMERA_API_URL already includes it
+      const apiUrl = CAMERA_API_URL.replace(/\/api$/, '');
+      const response = await fetch(`${apiUrl}/api/health`);
       const data = await response.json();
       setCameraApiConnected(data.status === 'running');
     } catch (err) {
-      console.error('Camera API not connected:', err);
+      // Silent fail - Camera API is optional for video upload
+      console.debug('Camera API not running (optional for streaming)');
       setCameraApiConnected(false);
     }
   };
@@ -539,9 +542,9 @@ function UploadAnalysisPage() {
         <div className="bg-blue-50 border-l-4 border-blue-400 p-4 flex items-start gap-3">
           <Video className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-blue-900">Camera API Not Connected</p>
+            <p className="text-sm font-medium text-blue-900">Live Streaming Optional</p>
             <p className="text-sm text-blue-700 mt-1">
-              To use live streaming, start the camera API: <code className="bg-blue-100 px-2 py-0.5 rounded">python camera_api.py</code>
+              Camera API is not running. You can still upload videos for analysis. To enable live streaming, start: <code className="bg-blue-100 px-2 py-0.5 rounded">python camera_api.py</code>
             </p>
           </div>
         </div>

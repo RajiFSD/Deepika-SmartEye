@@ -1,6 +1,5 @@
 /**
- * Object Counting Service with Image Capture
- * Handles business logic for object detection, counting, and image capture
+ * Object Counting Service with Enhanced Debugging
  */
 const { spawn } = require('child_process');
 const path = require('path');
@@ -12,23 +11,27 @@ const { Op } = require('sequelize');
 
 class ObjectCountingService {
   constructor() {
-  this.activeProcesses = new Map();
+    this.activeProcesses = new Map();
 
-  // ✅ Cross-platform safe Python script path
- // this.pythonScript = path.resolve(__dirname, "../../../ai-module/src/models/object_counter.py");
-  this.pythonScript = path.resolve(__dirname, "../../../ai-module/src/models/object_counter.py");
-  console.log('✅ Using Python script path:', this.pythonScript);
-  if (!fsSync.existsSync(this.pythonScript)) {
-    console.warn("⚠️ Python script not found at:", this.pythonScript);
-  } else {
-    console.log("✅ Using Python script path:", this.pythonScript);
+    // ✅ Verify Python script exists
+    this.pythonScript = path.resolve(__dirname, "../../../ai-module/src/models/object_counter.py");
+    
+    console.log('🔍 Checking Python script at:', this.pythonScript);
+    
+    if (!fsSync.existsSync(this.pythonScript)) {
+      console.error('❌ Python script NOT FOUND at:', this.pythonScript);
+      console.log('📁 Current directory:', __dirname);
+      console.log('📁 Looking for script at:', this.pythonScript);
+    } else {
+      console.log('✅ Python script found at:', this.pythonScript);
+    }
+
+    // ✅ Directories for storing results and images
+    this.resultsDir = path.join(__dirname, "../uploads/object-counting/results");
+    this.imagesDir = path.join(__dirname, "../uploads/object-counting/images");
+    this.ensureDirectories();
   }
 
-  // ✅ Directories for storing results and images
-  this.resultsDir = path.join(__dirname, "../uploads/object-counting/results");
-  this.imagesDir = path.join(__dirname, "../uploads/object-counting/images");
-  this.ensureDirectories();
-}
   async ensureDirectories() {
     const dirs = [
       path.join(__dirname, '../uploads/object-counting'),
@@ -68,13 +71,14 @@ class ObjectCountingService {
           camera_name: jobData.cameraName,
           uploaded_at: new Date().toISOString(),
           capture_images: jobData.captureImages !== false,
-          image_output_dir: this.getJobImageDir(jobData.jobId || uuidv4())
+          image_output_dir: this.getJobImageDir(jobData.jobId || uuidv4()),
+          logs: []
         }
       });
 
       return this.formatJob(job);
     } catch (error) {
-      console.error('Create job error:', error);
+      console.error('❌ Create job error:', error);
       throw error;
     }
   }
@@ -97,7 +101,7 @@ class ObjectCountingService {
 
       return job ? this.formatJob(job) : null;
     } catch (error) {
-      console.error('Get job error:', error);
+      console.error('❌ Get job error:', error);
       throw error;
     }
   }
@@ -107,7 +111,6 @@ class ObjectCountingService {
    */
   async getJobs(filters = {}, options = {}) {
     try {
-      console.log('Filters:', filters);
       const where = {};
       
       if (filters.userId) where.user_id = filters.userId;
@@ -121,13 +124,13 @@ class ObjectCountingService {
         offset: options.offset || 0,
         order: [['created_at', 'DESC']]
       });
-console.log(`Found ${jobs.count} jobs matching filters`);
+
       return {
         count: jobs.count,
         rows: jobs.rows.map(job => this.formatJob(job))
       };
     } catch (error) {
-      console.error('Get jobs error:', error);
+      console.error('❌ Get jobs error:', error);
       throw error;
     }
   }
@@ -143,6 +146,11 @@ console.log(`Found ${jobs.count} jobs matching filters`);
     }
 
     try {
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`🚀 Starting job ${jobId}`);
+      console.log(`📹 Source: ${job.file_path || job.stream_url}`);
+      console.log(`${'='.repeat(60)}\n`);
+
       await job.update({ 
         status: 'processing', 
         progress: 10,
@@ -174,9 +182,10 @@ console.log(`Found ${jobs.count} jobs matching filters`);
         }
       });
 
+      console.log(`\n✅ Job ${jobId} completed successfully!`);
       return this.formatJob(job);
     } catch (error) {
-      console.error(`Job ${jobId} processing error:`, error);
+      console.error(`\n❌ Job ${jobId} processing error:`, error);
       await job.update({
         status: 'failed',
         completed_at: new Date(),
@@ -187,94 +196,122 @@ console.log(`Found ${jobs.count} jobs matching filters`);
   }
 
   /**
-   * Run Python object counter script with image capture
+   * Run Python object counter script with enhanced logging
    */
   runPythonCounter(videoSource, jobId, outputPath, imageOutputDir, job) {
     return new Promise((resolve, reject) => {
+      // Verify Python script exists
       if (!fsSync.existsSync(this.pythonScript)) {
-        reject(new Error('Python script not found: ' + this.pythonScript));
+        reject(new Error(`Python script not found at: ${this.pythonScript}`));
         return;
       }
 
-      const args = [this.pythonScript, videoSource, outputPath];
+      // Verify video source exists
+      if (!videoSource.startsWith('http') && !fsSync.existsSync(videoSource)) {
+        reject(new Error(`Video source not found: ${videoSource}`));
+        return;
+      }
+
+      const args = [this.pythonScript, videoSource, outputPath, '--images', imageOutputDir];
       
-      // Add model type
-      if (job.model_type) {
-        args.push('--model', job.model_type);
-      }
+      console.log('🐍 Running Python command:');
+      console.log(`   python ${args.join(' ')}`);
+      console.log('');
 
-      // Add image capture settings
-      const captureImages = job.metadata?.capture_images !== false;
-      if (captureImages) {
-        args.push('--images', imageOutputDir);
-      } else {
-        args.push('--no-images');
-      }
-
-      console.log('🐍 Running Python with args:', args);
-
-      const pythonProcess = spawn('python3', args);
+      const pythonProcess = spawn('python', args);
       this.activeProcesses.set(jobId, pythonProcess);
 
       let stdout = '';
       let stderr = '';
       let lastProgress = 10;
+      let lastLogTime = Date.now();
 
       pythonProcess.stdout.on('data', async (data) => {
         const output = data.toString();
         stdout += output;
-        console.log(`[Job ${jobId}] ${output}`);
+        
+        // Log every line
+        console.log(`[Job ${jobId}] ${output.trim()}`);
 
-        // Parse progress
-        const progressMatch = output.match(/Progress.*?(\d+\.?\d*)%/);
-        if (progressMatch) {
-          const progress = Math.min(95, parseInt(progressMatch[1]));
-          if (progress > lastProgress) {
-            lastProgress = progress;
-            await job.update({ progress });
+        // Parse progress with more patterns
+        const progressPatterns = [
+          /Progress.*?(\d+\.?\d*)%/i,
+          /Frame.*?(\d+).*?\/.*?(\d+)/i,
+          /Processing.*?(\d+\.?\d*)%/i
+        ];
+
+        for (const pattern of progressPatterns) {
+          const match = output.match(pattern);
+          if (match) {
+            let progress;
+            if (match[2]) {
+              // Frame X / Total pattern
+              progress = Math.min(95, (parseInt(match[1]) / parseInt(match[2])) * 100);
+            } else {
+              progress = Math.min(95, parseFloat(match[1]));
+            }
+            
+            if (progress > lastProgress && progress - lastProgress >= 5) {
+              lastProgress = Math.floor(progress);
+              console.log(`📊 Progress update: ${lastProgress}%`);
+              await job.update({ progress: lastProgress });
+            }
+            break;
           }
         }
 
-        // Update metadata with logs - ensure metadata is an object
-        try {
-          let metadata = job.metadata;
-          
-          // If metadata is a string, parse it
-          if (typeof metadata === 'string') {
-            metadata = JSON.parse(metadata);
+        // Update logs every 5 seconds
+        const now = Date.now();
+        if (now - lastLogTime > 5000) {
+          lastLogTime = now;
+          try {
+            let metadata = job.metadata || {};
+            if (typeof metadata === 'string') metadata = JSON.parse(metadata);
+            if (!metadata.logs) metadata.logs = [];
+            metadata.logs.push(`[${new Date().toISOString()}] ${output.trim()}`);
+            
+            // Keep only last 50 log entries
+            if (metadata.logs.length > 50) {
+              metadata.logs = metadata.logs.slice(-50);
+            }
+            
+            await job.update({ metadata });
+          } catch (err) {
+            console.error('❌ Error updating logs:', err);
           }
-          
-          // If metadata is null/undefined, create new object
-          if (!metadata || typeof metadata !== 'object') {
-            metadata = {};
-          }
-          
-          // Initialize logs array if it doesn't exist
-          if (!Array.isArray(metadata.logs)) {
-            metadata.logs = [];
-          }
-          
-          metadata.logs.push(output);
-          await job.update({ metadata });
-        } catch (err) {
-          console.error('Error updating metadata:', err);
         }
       });
 
       pythonProcess.stderr.on('data', (data) => {
         const error = data.toString();
         stderr += error;
-        console.error(`[Job ${jobId}] Error: ${error}`);
+        console.error(`[Job ${jobId}] ⚠️  ${error.trim()}`);
       });
 
       pythonProcess.on('close', (code) => {
         this.activeProcesses.delete(jobId);
 
+        console.log(`\n[Job ${jobId}] Python process exited with code ${code}`);
+
         if (code === 0) {
           try {
+            // Parse JSON from last line
             const lines = stdout.trim().split('\n');
-            const lastLine = lines[lines.length - 1];
-            const results = JSON.parse(lastLine);
+            let results = null;
+            
+            // Try to find JSON in last few lines
+            for (let i = lines.length - 1; i >= Math.max(0, lines.length - 5); i--) {
+              try {
+                results = JSON.parse(lines[i]);
+                break;
+              } catch (e) {
+                // Continue to next line
+              }
+            }
+
+            if (!results) {
+              throw new Error('Could not find valid JSON results in output');
+            }
             
             console.log(`✅ Job ${jobId} completed:`, {
               counted: results.total_counted,
@@ -284,17 +321,35 @@ console.log(`Found ${jobs.count} jobs matching filters`);
             
             resolve(results);
           } catch (err) {
-            reject(new Error(`Failed to parse Python output: ${err.message}\nOutput: ${stdout}`));
+            console.error('❌ Failed to parse results:', err);
+            console.log('📄 Last 5 lines of output:');
+            const lines = stdout.trim().split('\n');
+            lines.slice(-5).forEach(line => console.log('  ', line));
+            
+            reject(new Error(`Failed to parse Python output: ${err.message}`));
           }
         } else {
+          console.error('❌ Python process failed');
+          console.error('📄 stderr output:', stderr);
           reject(new Error(`Python process exited with code ${code}\nError: ${stderr}`));
         }
       });
 
       pythonProcess.on('error', (err) => {
         this.activeProcesses.delete(jobId);
+        console.error(`❌ Failed to start Python process:`, err);
         reject(new Error(`Failed to start Python process: ${err.message}`));
       });
+
+      // Timeout after 30 minutes
+      setTimeout(() => {
+        if (this.activeProcesses.has(jobId)) {
+          console.error(`⏰ Job ${jobId} timeout after 30 minutes`);
+          pythonProcess.kill('SIGTERM');
+          this.activeProcesses.delete(jobId);
+          reject(new Error('Processing timeout after 30 minutes'));
+        }
+      }, 30 * 60 * 1000);
     });
   }
 
@@ -305,6 +360,7 @@ console.log(`Found ${jobs.count} jobs matching filters`);
     const pythonProcess = this.activeProcesses.get(jobId);
     
     if (pythonProcess) {
+      console.log(`🛑 Cancelling job ${jobId}...`);
       pythonProcess.kill('SIGTERM');
       this.activeProcesses.delete(jobId);
     }
@@ -330,24 +386,21 @@ console.log(`Found ${jobs.count} jobs matching filters`);
 
     // Delete associated files
     try {
-      // Delete uploaded video
       if (job.file_path && fsSync.existsSync(job.file_path)) {
         await fs.unlink(job.file_path);
       }
       
-      // Delete output video
       const outputPath = job.results?.outputVideoPath;
       if (outputPath && fsSync.existsSync(outputPath)) {
         await fs.unlink(outputPath);
       }
 
-      // Delete captured images directory
       const imageDir = this.getJobImageDir(jobId);
       if (fsSync.existsSync(imageDir)) {
         await fs.rm(imageDir, { recursive: true, force: true });
       }
     } catch (err) {
-      console.error('Error deleting files:', err);
+      console.error('❌ Error deleting files:', err);
     }
 
     await job.destroy();
@@ -375,13 +428,13 @@ console.log(`Found ${jobs.count} jobs matching filters`);
 
       return images;
     } catch (error) {
-      console.error('Error getting job images:', error);
+      console.error('❌ Error getting job images:', error);
       return [];
     }
   }
 
   /**
-   * Get statistics for object counting jobs
+   * Get statistics
    */
   async getStats(userId, options = {}) {
     try {
@@ -416,54 +469,9 @@ console.log(`Found ${jobs.count} jobs matching filters`);
 
       return stats;
     } catch (error) {
-      console.error('Get stats error:', error);
+      console.error('❌ Get stats error:', error);
       throw error;
     }
-  }
-
-  /**
-   * Save job results to PeopleCount table
-   */
-  async saveToPeopleCount(jobId) {
-    const job = await ObjectCountingJob.findOne({ where: { job_id: jobId } });
-    
-    if (!job || job.status !== 'completed') {
-      throw new Error('Job not found or not completed');
-    }
-
-    const { PeopleCount } = require('../models');
-    const detections = job.results?.detections || [];
-    
-    const savedRecords = [];
-    
-    for (const detection of detections) {
-      try {
-        const record = await PeopleCount.create({
-          branch_id: job.branch_id,
-          zone_id: job.zone_id,
-          camera_id: job.camera_id,
-          person_id: detection.object_id,
-          direction: detection.direction === 'DOWN' ? 'IN' : 'OUT',
-          detection_time: detection.timestamp,
-          confidence_score: detection.confidence,
-          metadata: {
-            source: 'object_counting_job',
-            job_id: jobId,
-            bbox: detection.position,
-            class: detection.class,
-            captured_image: detection.captured_image?.path
-          }
-        });
-        savedRecords.push(record);
-      } catch (err) {
-        console.error('Error saving detection:', err);
-      }
-    }
-
-    return {
-      saved: savedRecords.length,
-      total: detections.length
-    };
   }
 
   /**
@@ -505,7 +513,7 @@ console.log(`Found ${jobs.count} jobs matching filters`);
    */
   stopAllProcessing() {
     for (const [jobId, process] of this.activeProcesses.entries()) {
-      console.log(`Stopping job ${jobId}...`);
+      console.log(`🛑 Stopping job ${jobId}...`);
       process.kill('SIGTERM');
     }
     this.activeProcesses.clear();
