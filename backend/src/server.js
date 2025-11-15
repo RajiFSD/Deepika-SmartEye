@@ -40,6 +40,7 @@ const productRoutes = require("./routes/product.routes");
 const productConfigRoutes = require("./routes/productConfig.routes");
 const tenantProductRoutes = require("./routes/tenantProduct.routes");
 const productScanRoutes = require("./routes/productScanResult.routes");
+const firebaseAdmin = require('./routes/fireDetectionRoutes');
 
 
 class Server {
@@ -168,6 +169,7 @@ class Server {
     this.app.use('/api/product-config', productConfigRoutes);
     this.app.use('/api/tenant-products', tenantProductRoutes);
     this.app.use('/api/product-scans', productScanRoutes);
+    this.app.use('/api/fire-detection', firebaseAdmin);
     
     // Health check
     this.app.get('/api/health', (req, res) => {

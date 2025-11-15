@@ -1,6 +1,6 @@
 // services/fireDetectionService.js
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 class FireDetectionService {
   /**
@@ -24,7 +24,8 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
@@ -49,7 +50,8 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
@@ -79,11 +81,22 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Return empty data for 404 instead of throwing
+        if (response.status === 404) {
+          console.warn('Fire alerts endpoint not found (404). This endpoint may not be implemented yet.');
+          return { success: true, data: [] };
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
     } catch (error) {
+      // If it's a network error or endpoint doesn't exist, return empty data
+      if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
+        console.warn('Fire alerts endpoint not accessible:', error.message);
+        return { success: true, data: [] };
+      }
       console.error('Get alerts error:', error);
       throw error;
     }
@@ -106,11 +119,37 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Return default stats for 404
+        if (response.status === 404) {
+          console.warn('Fire detection stats endpoint not found (404).');
+          return {
+            success: true,
+            data: {
+              total_alerts: 0,
+              active_alerts: 0,
+              false_positives: 0,
+              avg_confidence: 0
+            }
+          };
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
     } catch (error) {
+      if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
+        console.warn('Fire detection stats endpoint not accessible.');
+        return {
+          success: true,
+          data: {
+            total_alerts: 0,
+            active_alerts: 0,
+            false_positives: 0,
+            avg_confidence: 0
+          }
+        };
+      }
       console.error('Get stats error:', error);
       throw error;
     }
@@ -131,11 +170,21 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Return empty data for 404
+        if (response.status === 404) {
+          console.warn('Analytics endpoint not found (404).');
+          return { success: false, data: [] };
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
     } catch (error) {
+      if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
+        console.warn('Analytics endpoint not accessible.');
+        return { success: false, data: [] };
+      }
       console.error('Get analytics error:', error);
       throw error;
     }
@@ -156,7 +205,8 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
@@ -181,7 +231,8 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
@@ -203,7 +254,8 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
@@ -225,7 +277,8 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       const blob = await response.blob();
@@ -258,7 +311,8 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
@@ -280,11 +334,21 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Return inactive status for 404
+        if (response.status === 404) {
+          console.warn('Detection status endpoint not found (404).');
+          return { success: true, is_active: false, camera_id: cameraId };
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
     } catch (error) {
+      if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
+        console.warn('Detection status endpoint not accessible.');
+        return { success: true, is_active: false, camera_id: cameraId };
+      }
       console.error('Get status error:', error);
       throw error;
     }
@@ -307,7 +371,8 @@ class FireDetectionService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Flame, AlertTriangle, Camera, Activity, Bell, Settings, TrendingUp, Clock } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import fireDetectionService from '../services/fireDetectionService';
+import cameraService from '../services/cameraService';
 
 export default function FireDetectionPage() {
   const [cameras, setCameras] = useState([]);
@@ -24,6 +25,7 @@ export default function FireDetectionPage() {
   });
   const [loading, setLoading] = useState(false);
   const [currentAlert, setCurrentAlert] = useState(null);
+  const [error, setError] = useState(null);
   const videoRef = useRef(null);
   const audioRef = useRef(null);
 
@@ -31,91 +33,144 @@ export default function FireDetectionPage() {
   useEffect(() => {
     loadCameras();
     loadAlerts();
-    generateMockChartData();
+    loadStats();
+    loadChartData();
     
     // Auto-refresh every 5 seconds when detecting
     const interval = setInterval(() => {
       if (isDetecting) {
         loadAlerts();
-        updateStats();
+        loadStats();
+        checkDetectionStatus();
       }
     }, 5000);
 
     return () => clearInterval(interval);
   }, [isDetecting]);
 
+  // Check if selected camera has active detection
+  useEffect(() => {
+    if (selectedCamera) {
+      checkDetectionStatus();
+    }
+  }, [selectedCamera]);
+
   const loadCameras = async () => {
     try {
-      // Replace with your actual API call
-      // const response = await fetch('/api/cameras');
-      // const data = await response.json();
+      // Use cameraService to fetch cameras
+      const response = await cameraService.getCameras({
+        is_active: true // Only get active cameras
+      });
+      console.log('Cameras response:', response);
+      if (response.success) {
+        // Handle both array and paginated response
+        const camerasData = Array.isArray(response.data) 
+          ? response.data 
+          : (response.data?.cameras || response.data?.items || []);
+        console.log('Fetched cameras:', camerasData);
+        setCameras(camerasData);
+        
+        if (camerasData.length > 0) {
+          const firstCamera = camerasData[0];
+          setSelectedCamera(firstCamera);
+          // Build stream URL from camera data
+          const streamUrl = firstCamera.stream_url || 
+                          `http://${firstCamera.ip_address}:${firstCamera.port}/video`;
+          setStreamUrl(streamUrl);
+        }
+      } else {
+        throw new Error(response.message || 'Failed to load cameras');
+      }
+    } catch (error) {
+      console.error('Failed to load cameras:', error);
+      setError('Failed to load cameras. Using fallback data.');
       
-      // Mock data for demonstration
+      // Fallback to mock data if API fails
       const mockCameras = [
-        { id: 1, name: 'Main Entrance', ip: '192.168.31.89', port: '8080', status: 'active' },
-        { id: 2, name: 'Warehouse', ip: '192.168.31.90', port: '8080', status: 'active' },
-        { id: 3, name: 'Parking Area', ip: '192.168.31.91', port: '8080', status: 'inactive' }
+        { id: 1, name: 'Main Entrance', ip_address: '192.168.31.89', port: '8080', status: 'active', is_active: true },
+        { id: 2, name: 'Warehouse', ip_address: '192.168.31.90', port: '8080', status: 'active', is_active: true },
+        { id: 3, name: 'Parking Area', ip_address: '192.168.31.91', port: '8080', status: 'inactive', is_active: false }
       ];
       
       setCameras(mockCameras);
       if (mockCameras.length > 0) {
         setSelectedCamera(mockCameras[0]);
-        setStreamUrl(`http://${mockCameras[0].ip}:${mockCameras[0].port}/video`);
+        setStreamUrl(`http://${mockCameras[0].ip_address}:${mockCameras[0].port}/video`);
       }
-    } catch (error) {
-      console.error('Failed to load cameras:', error);
     }
   };
 
   const loadAlerts = async () => {
     try {
-      // Replace with your actual API call
-      // const response = await fetch('/api/fire-alerts');
-      // const data = await response.json();
+      const response = await fireDetectionService.getAlerts({
+        limit: 10,
+        camera_id: selectedCamera?.id
+      });
       
-      // Mock recent alerts
-      const mockAlerts = [
-        {
-          id: 1,
-          camera: 'Main Entrance',
-          timestamp: new Date(Date.now() - 300000).toISOString(),
-          confidence: 0.92,
-          status: 'confirmed',
-          resolved: true
-        },
-        {
-          id: 2,
-          camera: 'Warehouse',
-          timestamp: new Date(Date.now() - 120000).toISOString(),
-          confidence: 0.85,
-          status: 'active',
-          resolved: false
-        }
-      ];
-      
-      setRecentAlerts(mockAlerts);
-      
-      // Update current alert if there's an active one
-      const activeAlert = mockAlerts.find(a => !a.resolved);
-      if (activeAlert && isDetecting) {
-        setCurrentAlert(activeAlert);
-        if (settings.alertSound) {
-          playAlertSound();
+      if (response.success) {
+        const alerts = response.data.map(alert => ({
+          id: alert.id,
+          camera: alert.camera_name || 'Unknown Camera',
+          timestamp: alert.timestamp,
+          confidence: alert.confidence,
+          status: alert.status,
+          resolved: alert.status === 'resolved' || alert.status === 'false_positive'
+        }));
+        
+        setRecentAlerts(alerts);
+        
+        // Update current alert if there's an active one
+        const activeAlert = alerts.find(a => !a.resolved);
+        if (activeAlert && isDetecting) {
+          setCurrentAlert(activeAlert);
+          if (settings.alertSound && currentAlert?.id !== activeAlert.id) {
+            playAlertSound();
+          }
+        } else if (!activeAlert) {
+          setCurrentAlert(null);
         }
       }
     } catch (error) {
       console.error('Failed to load alerts:', error);
+      // Don't show error for alerts as it's not critical
     }
   };
 
-  const updateStats = () => {
-    // Mock stats update - replace with actual API call
-    setDetectionStats(prev => ({
-      totalAlerts: prev.totalAlerts + Math.floor(Math.random() * 2),
-      activeAlerts: Math.floor(Math.random() * 3),
-      falsePositives: prev.falsePositives + Math.floor(Math.random() * 1),
-      avgConfidence: 85 + Math.random() * 10
-    }));
+  const loadStats = async () => {
+    try {
+      const response = await fireDetectionService.getStats();
+      
+      if (response.success) {
+        setDetectionStats({
+          totalAlerts: response.data.total_alerts || 0,
+          activeAlerts: response.data.active_alerts || 0,
+          falsePositives: response.data.false_positives || 0,
+          avgConfidence: response.data.avg_confidence || 0
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+    }
+  };
+
+  const loadChartData = async () => {
+    try {
+      const response = await fireDetectionService.getHourlyAnalytics();
+      
+      if (response.success && response.data) {
+        const formattedData = response.data.map(item => ({
+          time: item.hour,
+          alerts: item.alerts,
+          falseAlerts: item.false_alerts
+        }));
+        
+        setChartData(formattedData);
+      }
+    } catch (error) {
+      console.error('Failed to load chart data:', error);
+      // Generate mock data as fallback
+      generateMockChartData();
+    }
   };
 
   const generateMockChartData = () => {
@@ -131,6 +186,20 @@ export default function FireDetectionPage() {
     setChartData(data);
   };
 
+  const checkDetectionStatus = async () => {
+    if (!selectedCamera) return;
+    
+    try {
+      const response = await fireDetectionService.getDetectionStatus(selectedCamera.id);
+      
+      if (response.success) {
+        setIsDetecting(response.is_active);
+      }
+    } catch (error) {
+      console.error('Failed to check detection status:', error);
+    }
+  };
+
   const startDetection = async () => {
     if (!selectedCamera) {
       alert('Please select a camera first');
@@ -138,42 +207,48 @@ export default function FireDetectionPage() {
     }
 
     setLoading(true);
+    setError(null);
+    
     try {
-      // Replace with your actual API call to start fire detection
-      // const response = await fetch('/api/fire-detection/start', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({
-      //     camera_id: selectedCamera.id,
-      //     sensitivity: settings.sensitivity,
-      //     min_confidence: settings.minConfidence
-      //   })
-      // });
+      const response = await fireDetectionService.startDetection(
+        selectedCamera.id,
+        settings
+      );
       
-      // Mock success
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setIsDetecting(true);
-      console.log('Fire detection started for camera:', selectedCamera.name);
+      if (response.success) {
+        setIsDetecting(true);
+        console.log('Fire detection started for camera:', selectedCamera.name);
+      } else {
+        throw new Error(response.message || 'Failed to start detection');
+      }
     } catch (error) {
       console.error('Failed to start detection:', error);
-      alert('Failed to start fire detection');
+      setError('Failed to start fire detection: ' + error.message);
+      alert('Failed to start fire detection: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
   const stopDetection = async () => {
+    if (!selectedCamera) return;
+    
     setLoading(true);
+    setError(null);
+    
     try {
-      // Replace with your actual API call
-      // await fetch(`/api/fire-detection/stop/${selectedCamera.id}`, { method: 'POST' });
+      const response = await fireDetectionService.stopDetection(selectedCamera.id);
       
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setIsDetecting(false);
-      setCurrentAlert(null);
-      console.log('Fire detection stopped');
+      if (response.success) {
+        setIsDetecting(false);
+        setCurrentAlert(null);
+        console.log('Fire detection stopped');
+      } else {
+        throw new Error(response.message || 'Failed to stop detection');
+      }
     } catch (error) {
       console.error('Failed to stop detection:', error);
+      setError('Failed to stop detection: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -181,44 +256,49 @@ export default function FireDetectionPage() {
 
   const resolveAlert = async (alertId) => {
     try {
-      // Replace with your actual API call
-      // await fetch(`/api/fire-alerts/${alertId}/resolve`, { method: 'POST' });
+      const response = await fireDetectionService.resolveAlert(alertId);
       
-      setRecentAlerts(prev => 
-        prev.map(alert => 
-          alert.id === alertId ? { ...alert, resolved: true, status: 'resolved' } : alert
-        )
-      );
-      
-      if (currentAlert?.id === alertId) {
-        setCurrentAlert(null);
+      if (response.success) {
+        setRecentAlerts(prev => 
+          prev.map(alert => 
+            alert.id === alertId ? { ...alert, resolved: true, status: 'resolved' } : alert
+          )
+        );
+        
+        if (currentAlert?.id === alertId) {
+          setCurrentAlert(null);
+        }
+        
+        // Reload stats
+        loadStats();
       }
     } catch (error) {
       console.error('Failed to resolve alert:', error);
+      alert('Failed to resolve alert: ' + error.message);
     }
   };
 
   const markFalsePositive = async (alertId) => {
     try {
-      // Replace with your actual API call
-      // await fetch(`/api/fire-alerts/${alertId}/false-positive`, { method: 'POST' });
+      const response = await fireDetectionService.markFalsePositive(alertId);
       
-      setRecentAlerts(prev => 
-        prev.map(alert => 
-          alert.id === alertId ? { ...alert, status: 'false_positive', resolved: true } : alert
-        )
-      );
-      
-      setDetectionStats(prev => ({
-        ...prev,
-        falsePositives: prev.falsePositives + 1
-      }));
-      
-      if (currentAlert?.id === alertId) {
-        setCurrentAlert(null);
+      if (response.success) {
+        setRecentAlerts(prev => 
+          prev.map(alert => 
+            alert.id === alertId ? { ...alert, status: 'false_positive', resolved: true } : alert
+          )
+        );
+        
+        if (currentAlert?.id === alertId) {
+          setCurrentAlert(null);
+        }
+        
+        // Reload stats
+        loadStats();
       }
     } catch (error) {
       console.error('Failed to mark as false positive:', error);
+      alert('Failed to mark as false positive: ' + error.message);
     }
   };
 
@@ -263,7 +343,11 @@ export default function FireDetectionPage() {
               {isDetecting ? 'Detecting' : 'Idle'}
             </span>
             <button 
-              onClick={loadAlerts}
+              onClick={() => {
+                loadAlerts();
+                loadStats();
+                loadChartData();
+              }}
               className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
             >
               Refresh
@@ -271,6 +355,15 @@ export default function FireDetectionPage() {
           </div>
         </div>
       </header>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-yellow-50 border-b border-yellow-200">
+          <div className="mx-auto max-w-7xl px-4 py-2">
+            <p className="text-sm text-yellow-800">{error}</p>
+          </div>
+        </div>
+      )}
 
       {/* Active Alert Banner */}
       {currentAlert && !currentAlert.resolved && (
@@ -352,7 +445,9 @@ export default function FireDetectionPage() {
                     key={camera.id}
                     onClick={() => {
                       setSelectedCamera(camera);
-                      setStreamUrl(`http://${camera.ip}:${camera.port}/video`);
+                      const streamUrl = camera.stream_url || 
+                                      `http://${camera.ip_address}:${camera.port}/video`;
+                      setStreamUrl(streamUrl);
                     }}
                     className={`w-full text-left p-3 rounded-lg border transition ${
                       selectedCamera?.id === camera.id
@@ -364,11 +459,11 @@ export default function FireDetectionPage() {
                       <div>
                         <div className="font-medium text-sm">{camera.name}</div>
                         <div className="text-xs text-gray-500">
-                          {camera.ip}:{camera.port}
+                          {camera.ip_address}:{camera.port}
                         </div>
                       </div>
                       <span className={`inline-block h-2 w-2 rounded-full ${
-                        camera.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+                        camera.status === 'active' || camera.is_active ? 'bg-green-500' : 'bg-gray-300'
                       }`} />
                     </div>
                   </button>
@@ -395,6 +490,7 @@ export default function FireDetectionPage() {
                     value={settings.sensitivity}
                     onChange={(e) => setSettings({ ...settings, sensitivity: parseInt(e.target.value) })}
                     className="w-full"
+                    disabled={isDetecting}
                   />
                 </div>
 
@@ -410,6 +506,7 @@ export default function FireDetectionPage() {
                     value={settings.minConfidence}
                     onChange={(e) => setSettings({ ...settings, minConfidence: parseInt(e.target.value) })}
                     className="w-full"
+                    disabled={isDetecting}
                   />
                 </div>
 
@@ -447,7 +544,7 @@ export default function FireDetectionPage() {
                   <button
                     onClick={startDetection}
                     disabled={loading || !selectedCamera}
-                    className="flex-1 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-60"
+                    className="flex-1 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {loading ? 'Starting...' : 'Start Detection'}
                   </button>
@@ -552,6 +649,9 @@ export default function FireDetectionPage() {
                     alt="Live camera stream"
                     className="h-full w-full object-contain"
                     draggable={false}
+                    onError={(e) => {
+                      console.error('Failed to load camera stream');
+                    }}
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">

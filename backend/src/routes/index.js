@@ -22,6 +22,7 @@ const productRoutes = require("./product.routes");
 const productConfigRoutes = require("./productConfig.routes");
 const tenantProductRoutes = require("./tenantProduct.routes");
 const productScanRoutes = require("./productScanResult.routes");
+const firebaseAdmin = require('./fireDetectionRoutes');
 
 
 console.log("Main routes loaded");
@@ -46,5 +47,6 @@ router.use("/products", productRoutes);
 router.use("/product-config", productConfigRoutes);
 router.use("/tenant-products", tenantProductRoutes);
 router.use("/product-scans", productScanRoutes);  
+router.use("/fire-detection", firebaseAdmin);
 
 module.exports = router;
