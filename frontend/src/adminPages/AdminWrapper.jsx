@@ -1,57 +1,136 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Users, LogOut, Menu, X, Building2, UserSquare2, Camera, 
-  Shield, LayoutDashboard , CreditCard, FileSpreadsheet , DollarSign , Layers } from 'lucide-react';
+  Shield, LayoutDashboard, CreditCard, FileSpreadsheet, DollarSign, Layers, Package, Settings, ChevronDown, ChevronRight } from 'lucide-react';
 import authService from '../services/authService';
 
 function AdminWrapper({ setIsAdminAuth }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-    // ✅ Initialize user with default role
+  const [expandedMenus, setExpandedMenus] = useState({}); // Track which menus are expanded
+  
+  // ✅ Initialize user with default role
   const [user, setUser] = useState(() => {
     const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
-    
-  const userRole = adminUser?.role || 'viewer';
+    const userRole = adminUser?.role || 'viewer';
     return { ...adminUser, role: userRole };
   });
 
   const userRole = user.role || 'viewer';
   const [menuItems, setMenuItems] = useState([]);
   
-  // ✅ Active path checker
+  // ✅ Active path checker - now checks nested paths too
   const isActive = (path) => location.pathname === path;
+  
+  // ✅ Check if parent menu should be highlighted (any child is active)
+  const isParentActive = (items) => {
+    return items?.some(item => location.pathname === item.path);
+  };
 
   useEffect(() => {
-  const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
-  if (adminUser?.role) {
-    setUser(adminUser);
-  }
-}, []);
+    const adminUser = JSON.parse(localStorage.getItem('adminUser') || '{}');
+    if (adminUser?.role) {
+      setUser(adminUser);
+    }
+  }, []);
 
-    // 🎯 Define all possible menu items
   const allMenuItems = [
-    { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'admin', 'manager', 'viewer'] },
-    { path: '/admin/users', icon: Users, label: 'User Management', roles: ['super_admin', 'admin'] },
-    { path: '/admin/tenants', icon: UserSquare2, label: 'Tenants', roles: ['super_admin'] },
-    { path: '/admin/branches', icon: Building2, label: 'Branches', roles: ['super_admin', 'admin', 'manager'] },
-    { path: '/admin/cameras', icon: Camera, label: 'Cameras', roles: ['super_admin', 'admin', 'manager'] },
-    { path: '/admin/payments', icon: CreditCard, label: 'Payment Plans', roles: ['super_admin'] },
-    { path: '/admin/subscriptions', icon: Layers, label: 'Subscriptions', roles: ['super_admin'] },
-    { path: '/admin/product-master', icon: Layers, label: 'Product Master', roles: ['super_admin', 'admin'] },
-    { path: '/admin/product-config', icon: Layers, label: 'Product Config', roles: ['super_admin', 'admin'] },
-    { path: '/admin/product-tenant-mapping', icon: Layers, label: 'Product Tenant Mapping', roles: ['super_admin', 'admin'] },
-
+    { 
+      path: '/admin/dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      roles: ['super_admin', 'admin', 'manager', 'viewer']
+    },
+    { 
+      path: '/admin/users',
+      icon: Users,
+      label: 'User Management',
+      roles: ['super_admin', 'admin']
+    },
+    { 
+      path: '/admin/tenants',
+      icon: UserSquare2,
+      label: 'Tenants',
+      roles: ['super_admin']
+    },
+    { 
+      path: '/admin/branches',
+      icon: Building2,
+      label: 'Branches',
+      roles: ['super_admin', 'admin', 'manager']
+    },
+    { 
+      path: '/admin/cameras',
+      icon: Camera,
+      label: 'Cameras',
+      roles: ['super_admin', 'admin', 'manager']
+    },
+    { 
+      path: '/admin/payments',
+      icon: CreditCard,
+      label: 'Payment Plans',
+      roles: ['super_admin']
+    },
+    { 
+      path: '/admin/subscriptions',
+      icon: Layers,
+      label: 'Subscriptions',
+      roles: ['super_admin']
+    },
+    // Nested Product Master Menu
+    {
+      id: 'productMaster',
+      icon: Package,
+      label: 'Product Master',
+      roles: ['super_admin', 'admin'],
+      items: [
+        { 
+          path: '/admin/product-master',
+          icon: Package,
+          label: 'New Product',
+          roles: ['super_admin', 'admin']
+        },
+        { 
+          path: '/admin/product-config',
+          icon: Settings,
+          label: 'Configuration',
+          roles: ['super_admin', 'admin']
+        },
+        { 
+          path: '/admin/product-tenant-mapping',
+          icon: Building2,
+          label: 'Tenant Mapping',
+          roles: ['super_admin', 'admin']
+        }
+      ]
+    }
   ];
 
   // ✅ Filter and set menu items dynamically by role
-useEffect(() => {
-  if (userRole) {
-    const filtered = allMenuItems.filter(item => item.roles.includes(userRole.toLowerCase()));
-    setMenuItems(filtered);
-  }
-}, [userRole]);
-  
+  useEffect(() => {
+    if (userRole) {
+      const filtered = allMenuItems.filter(item => item.roles.includes(userRole.toLowerCase()));
+      setMenuItems(filtered);
+      
+      // Auto-expand parent menu if a child is active
+      const newExpandedMenus = {};
+      filtered.forEach(item => {
+        if (item.items && isParentActive(item.items)) {
+          newExpandedMenus[item.id] = true;
+        }
+      });
+      setExpandedMenus(newExpandedMenus);
+    }
+  }, [userRole, location.pathname]);
+
+  // ✅ Toggle nested menu expansion
+  const toggleMenu = (menuId) => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      [menuId]: !prev[menuId]
+    }));
+  };
 
   // ✅ Handle logout
   const handleLogout = () => {
@@ -60,7 +139,7 @@ useEffect(() => {
     navigate('/admin/login');
   };
 
-  // ✅ Menu item component
+  // ✅ Simple menu item component (for items with direct paths)
   const MenuItem = ({ label, path, Icon }) => (
     <button
       onClick={() => navigate(path)}
@@ -74,6 +153,56 @@ useEffect(() => {
       {label}
     </button>
   );
+
+  // ✅ Nested menu item component (for parent items with children)
+  const NestedMenuItem = ({ id, label, Icon, items }) => {
+    const isExpanded = expandedMenus[id];
+    const hasActiveChild = isParentActive(items);
+
+    return (
+      <div>
+        {/* Parent Button */}
+        <button
+          onClick={() => toggleMenu(id)}
+          className={`flex items-center justify-between w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+            hasActiveChild
+              ? 'bg-purple-50 text-purple-700'
+              : 'text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          <div className="flex items-center">
+            {Icon && <Icon className="w-5 h-5 mr-3" />}
+            {label}
+          </div>
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4" />
+          ) : (
+            <ChevronRight className="w-4 h-4" />
+          )}
+        </button>
+
+        {/* Child Items */}
+        {isExpanded && (
+          <div className="ml-4 mt-1 space-y-1">
+            {items.map((child) => (
+              <button
+                key={child.path}
+                onClick={() => navigate(child.path)}
+                className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  isActive(child.path)
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {child.icon && <child.icon className="w-4 h-4 mr-3" />}
+                {child.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -100,19 +229,34 @@ useEffect(() => {
           {/* Navigation */}
           <nav className="flex-1 px-4 py-4 overflow-y-auto">
             <div className="space-y-1">
-{menuItems.length > 0 ? (
-  menuItems.map((item) => (
-    <MenuItem
-      key={item.path}
-      label={item.label}
-      path={item.path}
-      Icon={item.icon}
-    />
-  ))
-) : (
-  <p className="text-gray-400 text-sm px-4">No menu available</p>
-)}
-
+              {menuItems.length > 0 ? (
+                menuItems.map((item) => {
+                  // Check if this is a nested menu item
+                  if (item.items) {
+                    return (
+                      <NestedMenuItem
+                        key={item.id}
+                        id={item.id}
+                        label={item.label}
+                        Icon={item.icon}
+                        items={item.items}
+                      />
+                    );
+                  }
+                  
+                  // Regular menu item
+                  return (
+                    <MenuItem
+                      key={item.path}
+                      label={item.label}
+                      path={item.path}
+                      Icon={item.icon}
+                    />
+                  );
+                })
+              ) : (
+                <p className="text-gray-400 text-sm px-4">No menu available</p>
+              )}
             </div>
           </nav>
 

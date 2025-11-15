@@ -128,6 +128,9 @@ function App() {
           <Route path="cameras" element={<CameraManagementPage />} />
           <Route path="payments" element={<PaymentPlansPage />} />
           <Route path="subscriptions" element={<SubscriptionsPage />} />
+           <Route path="product-master" element={<ProductMasterPage />} />
+          <Route path="product-config" element={<ProductConfigPage />} />
+          <Route path="product-tenant-mapping" element={<ProductTenantMappingPage />} />
         </Route>
 
         {/* ==================== USER PROTECTED ROUTES ==================== */}
@@ -163,9 +166,7 @@ function App() {
           <Route path="product-catalog" element={<ProductCatalogPage />} />
           <Route path="product-detection" element={<ProductDetectionLogsPage />} />
           <Route path="product-analytics" element={<ProductAnalyticsPage />} />
-          <Route path="product-master" element={<ProductMasterPage />} />
-          <Route path="product-config" element={<ProductConfigPage />} />
-          <Route path="product-tenant-mapping" element={<ProductTenantMappingPage />} />
+         
           {/* System */}
           <Route path="reports" element={<ReportsPage />} />
         </Route>

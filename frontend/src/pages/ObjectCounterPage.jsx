@@ -195,6 +195,16 @@ export default function ObjectCounterPage() {
     }
   };
 
+//   useEffect(() => {
+//   fetchJobs();
+
+//   const interval = setInterval(() => {
+//     fetchJobs();
+//   }, 5000); // 5 seconds
+
+//   return () => clearInterval(interval);
+// }, []);
+
   /**
    * Auto-refresh jobs
    */
@@ -209,7 +219,7 @@ export default function ObjectCounterPage() {
           if (job) setSelectedJob(job);
         });
       }
-    }, 3000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [selectedJob]);

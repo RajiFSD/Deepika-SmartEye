@@ -76,17 +76,7 @@ function PluginWrapper({ setIsAuthenticated }) {
         { path: '/product-detection', icon: Camera, label: 'Detection Logs' },
         { path: '/product-analytics', icon: Activity, label: 'Analytics' }
       ]
-    },
-    {
-      id: 'productMaster',
-      icon: Package,
-      label: 'Product Master',
-      items: [
-        { path: '/product-master', icon: Package, label: 'New Product' },
-        { path: '/product-config', icon: Settings, label: 'Configuration' },
-        { path: '/product-tenant-mapping', icon: Building2, label: 'Tenant Mapping' }
-      ]
-    },
+    },    
     {
       id: 'objectCounter',
       icon: Shield,
