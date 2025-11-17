@@ -35,6 +35,8 @@ import ProductMasterPage from './adminPages/ProductMasterPage';
 import ProductConfigPage from './adminPages/ProductConfigPage';
 import ProductTenantMappingPage from './adminPages/ProductTenantMappingPage';
 
+import TestCameraStream from './smokepages/TestCameraStream';
+
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -160,12 +162,16 @@ function App() {
           <Route path="smoke-alerts" element={<div>Smoke Alerts Page</div>} />
           <Route path="smoke-analytics" element={<div>Smoke Analytics Page</div>} />
           <Route path="/fire-detection" element={<FireDetectionPage />} />
+
+           <Route path="test-stream" element={<TestCameraStream />} />
           
           {/* Product Detection Module */}
           <Route path="product-overview" element={<ProductOverviewPage />} />
           <Route path="product-catalog" element={<ProductCatalogPage />} />
           <Route path="product-detection" element={<ProductDetectionLogsPage />} />
           <Route path="product-analytics" element={<ProductAnalyticsPage />} />
+
+         
          
           {/* System */}
           <Route path="reports" element={<ReportsPage />} />

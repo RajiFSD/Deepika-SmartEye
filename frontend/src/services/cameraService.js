@@ -1,6 +1,8 @@
 // src/services/cameraService.js
 import api from './api';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+
 const cameraService = {
   // Get all cameras with pagination
   getCameras: async (params = {}) => {
@@ -8,6 +10,20 @@ const cameraService = {
       console.log('🔵 Fetching cameras with params:', params);
       console.log('API URL:', api.defaults.baseURL);
       const response = await api.get('/cameras', { params });
+      console.log('✅ Cameras fetched:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error fetching cameras:', error);
+      throw error.response?.data?.message || 'Failed to fetch cameras';
+    }
+  },
+
+  // Get all cameras with pagination
+  getCamerasByuserId: async (user_id,params = {}) => {
+    try {
+      console.log('🔵 Fetching cameras with params:', params);
+      console.log('API URL:', api.defaults.baseURL);
+      const response = await api.get(`cameras/user/${user_id}?${params}`);
       console.log('✅ Cameras fetched:', response.data);
       return response.data;
     } catch (error) {
@@ -160,7 +176,15 @@ const cameraService = {
       console.error('❌ Error searching cameras:', error);
       throw error.response?.data?.message || 'Failed to search cameras';
     }
-  }
+  },
+
+ 
+
+ 
+
+
+
+
 };
 
 export default cameraService;

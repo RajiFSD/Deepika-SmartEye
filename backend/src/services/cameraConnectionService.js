@@ -1,7 +1,467 @@
+// services/cameraConnectionService.js
+// Complete unified service with database operations AND streaming
+
 const { Camera, Tenant, Branch, ZoneConfig, sequelize } = require("@models");
 const { Op } = require("sequelize");
+const { spawn } = require('child_process');
+const http = require('http');
+const https = require('https');
+
+// FFmpeg path - Windows requires full path sometimes
+const FFMPEG_PATH = process.env.FFMPEG_PATH || 
+  (process.platform === 'win32' ? 'C:\\ffmpeg\\bin\\ffmpeg.exe' : 'ffmpeg');
 
 class CameraConnectionService {
+  constructor() {
+    // Store active FFmpeg processes and HTTP streams
+    this.activeStreams = new Map();
+  }
+
+  // ============================================
+  // STREAMING METHODS
+  // ============================================
+
+  /**
+   * Start streaming from a camera
+   */
+  async startStream(streamId, streamUrl, options = {}) {
+    try {
+      // Check if already streaming
+      if (this.activeStreams.has(streamId)) {
+        console.log(`Stream ${streamId} already active`);
+        return {
+          success: true,
+          message: 'Stream already active',
+          streamId,
+          streamType: this.activeStreams.get(streamId).type
+        };
+      }
+
+      console.log(`🎬 Starting stream ${streamId} from ${streamUrl}`);
+
+      // Check if streamUrl is valid
+      if (!streamUrl) {
+        throw new Error('Stream URL is required but was null or undefined');
+      }
+
+      const {
+        fps = 1,
+        resolution = '1280x720',
+        onFrame = () => {},
+        onError = () => {}
+      } = options;
+
+      // For HTTP/MJPEG streams, fetch and forward the stream
+      if (streamUrl.startsWith('http://') || streamUrl.startsWith('https://')) {
+        console.log(`📡 HTTP/MJPEG stream detected for ${streamId}`);
+        
+        // Store HTTP stream info
+        const streamData = {
+          type: 'http',
+          streamUrl,
+          startTime: new Date(),
+          fps,
+          resolution,
+          isActive: true
+        };
+        
+        this.activeStreams.set(streamId, streamData);
+
+        // Start fetching frames from HTTP stream
+        this.startHttpStreamFetch(streamId, streamUrl, onFrame, onError);
+        
+        return {
+          success: true,
+          message: 'HTTP/MJPEG stream started',
+          streamId,
+          streamType: 'http'
+        };
+      }
+
+      // For RTSP streams, use FFmpeg to convert to MJPEG
+      console.log(`📹 RTSP stream detected, using FFmpeg for ${streamId}`);
+
+      const ffmpeg = spawn(FFMPEG_PATH, [
+        '-rtsp_transport', 'tcp',
+        '-i', streamUrl,
+        '-f', 'image2pipe',
+        '-vcodec', 'mjpeg',
+        '-q:v', '5',
+        '-r', fps.toString(),
+        '-vf', `scale=${resolution}`,
+        '-'
+      ]);
+
+      const streamData = {
+        type: 'rtsp',
+        process: ffmpeg,
+        streamUrl,
+        startTime: new Date(),
+        fps,
+        resolution,
+        isActive: true
+      };
+
+      // Handle FFmpeg output (frames)
+      ffmpeg.stdout.on('data', (data) => {
+        onFrame(data, streamId);
+      });
+
+      // Handle errors
+      ffmpeg.stderr.on('data', (data) => {
+        const message = data.toString();
+        // Only log actual errors, not info messages
+        if (message.includes('error') || message.includes('Error')) {
+          console.error(`FFmpeg error for ${streamId}:`, message);
+        }
+      });
+
+      ffmpeg.on('error', (error) => {
+        console.error(`FFmpeg process error for ${streamId}:`, error);
+        this.activeStreams.delete(streamId);
+        onError(error);
+      });
+
+      ffmpeg.on('close', (code) => {
+        console.log(`FFmpeg process for ${streamId} closed with code ${code}`);
+        this.activeStreams.delete(streamId);
+        if (code !== 0 && code !== null) {
+          onError(new Error(`FFmpeg exited with code ${code}`));
+        }
+      });
+
+      // Store the stream
+      this.activeStreams.set(streamId, streamData);
+
+      return {
+        success: true,
+        message: 'RTSP stream started',
+        streamId,
+        streamType: 'rtsp'
+      };
+
+    } catch (error) {
+      console.error(`Failed to start stream ${streamId}:`, error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  /**
+   * Fetch HTTP/MJPEG stream and convert to frames
+   */
+  startHttpStreamFetch(streamId, streamUrl, onFrame, onError) {
+    try {
+      const httpModule = streamUrl.startsWith('https://') ? https : http;
+      
+      const request = httpModule.get(streamUrl, (response) => {
+        if (response.statusCode !== 200) {
+          onError(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+          this.activeStreams.delete(streamId);
+          return;
+        }
+
+        console.log(`✅ Connected to HTTP stream: ${streamId}`);
+        console.log(`Content-Type: ${response.headers['content-type']}`);
+
+        let buffer = Buffer.alloc(0);
+        const boundary = this.extractBoundary(response.headers['content-type']);
+
+        response.on('data', (chunk) => {
+          // Check if stream is still active
+          const streamData = this.activeStreams.get(streamId);
+          if (!streamData || !streamData.isActive) {
+            request.abort();
+            return;
+          }
+
+          buffer = Buffer.concat([buffer, chunk]);
+
+          // Extract JPEG frames from MJPEG stream
+          if (boundary) {
+            const frames = this.extractFrames(buffer, boundary);
+            frames.forEach(frame => {
+              if (frame && frame.length > 0) {
+                onFrame(frame, streamId);
+              }
+            });
+          } else {
+            // If no boundary, assume single JPEG or continuous stream
+            const jpegStart = buffer.indexOf(Buffer.from([0xFF, 0xD8])); // JPEG SOI
+            const jpegEnd = buffer.indexOf(Buffer.from([0xFF, 0xD9])); // JPEG EOI
+            
+            if (jpegStart !== -1 && jpegEnd !== -1 && jpegEnd > jpegStart) {
+              const frame = buffer.slice(jpegStart, jpegEnd + 2);
+              onFrame(frame, streamId);
+              buffer = buffer.slice(jpegEnd + 2);
+            }
+          }
+        });
+
+        response.on('end', () => {
+          console.log(`HTTP stream ended: ${streamId}`);
+          this.activeStreams.delete(streamId);
+        });
+
+        response.on('error', (error) => {
+          console.error(`HTTP stream error for ${streamId}:`, error);
+          onError(error);
+          this.activeStreams.delete(streamId);
+        });
+      });
+
+      request.on('error', (error) => {
+        console.error(`HTTP request error for ${streamId}:`, error);
+        onError(error);
+        this.activeStreams.delete(streamId);
+      });
+
+      // Store the request so we can abort it later
+      const streamData = this.activeStreams.get(streamId);
+      if (streamData) {
+        streamData.request = request;
+      }
+
+    } catch (error) {
+      console.error(`Failed to fetch HTTP stream ${streamId}:`, error);
+      onError(error);
+      this.activeStreams.delete(streamId);
+    }
+  }
+
+  /**
+   * Extract boundary from Content-Type header
+   */
+  extractBoundary(contentType) {
+    if (!contentType) return null;
+    const match = contentType.match(/boundary=([^;]+)/i);
+    return match ? match[1].trim() : null;
+  }
+
+  /**
+   * Extract JPEG frames from MJPEG buffer
+   */
+  extractFrames(buffer, boundary) {
+    const frames = [];
+    const boundaryBuffer = Buffer.from(`--${boundary}`);
+    
+    let startIndex = 0;
+    while (true) {
+      const boundaryIndex = buffer.indexOf(boundaryBuffer, startIndex);
+      if (boundaryIndex === -1) break;
+
+      // Find JPEG start (0xFFD8)
+      const jpegStart = buffer.indexOf(Buffer.from([0xFF, 0xD8]), boundaryIndex);
+      if (jpegStart === -1) break;
+
+      // Find JPEG end (0xFFD9)
+      const jpegEnd = buffer.indexOf(Buffer.from([0xFF, 0xD9]), jpegStart);
+      if (jpegEnd === -1) break;
+
+      // Extract frame
+      const frame = buffer.slice(jpegStart, jpegEnd + 2);
+      frames.push(frame);
+
+      startIndex = jpegEnd + 2;
+    }
+
+    return frames;
+  }
+
+  /**
+   * Stop a streaming camera
+   */
+  stopStream(streamId) {
+    try {
+      const streamData = this.activeStreams.get(streamId);
+      
+      if (!streamData) {
+        return {
+          success: false,
+          message: 'Stream not found'
+        };
+      }
+
+      // Mark as inactive
+      streamData.isActive = false;
+
+      // Stop FFmpeg process
+      if (streamData.process) {
+        streamData.process.kill('SIGTERM');
+      }
+
+      // Abort HTTP request
+      if (streamData.request) {
+        streamData.request.abort();
+      }
+
+      this.activeStreams.delete(streamId);
+
+      console.log(`🛑 Stopped stream ${streamId}`);
+
+      return {
+        success: true,
+        message: 'Stream stopped',
+        streamId
+      };
+
+    } catch (error) {
+      console.error(`Error stopping stream ${streamId}:`, error);
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  /**
+   * Check if a stream is active
+   */
+  isStreaming(streamId) {
+    const streamData = this.activeStreams.get(streamId);
+    return streamData && streamData.isActive;
+  }
+
+  /**
+   * Get all active stream IDs
+   */
+  getActiveStreams() {
+    return Array.from(this.activeStreams.keys());
+  }
+
+  /**
+   * Stop all active streams
+   */
+  stopAllStreams() {
+    console.log(`🛑 Stopping all ${this.activeStreams.size} active streams`);
+    
+    for (const [streamId, streamData] of this.activeStreams) {
+      try {
+        streamData.isActive = false;
+        if (streamData.process) {
+          streamData.process.kill('SIGTERM');
+        }
+        if (streamData.request) {
+          streamData.request.abort();
+        }
+      } catch (error) {
+        console.error(`Error stopping stream ${streamId}:`, error);
+      }
+    }
+
+    this.activeStreams.clear();
+  }
+
+  /**
+   * Get stream info
+   */
+  getStreamInfo(streamId) {
+    const streamData = this.activeStreams.get(streamId);
+    
+    if (!streamData) {
+      return null;
+    }
+
+    return {
+      streamId,
+      type: streamData.type,
+      streamUrl: streamData.streamUrl,
+      startTime: streamData.startTime,
+      fps: streamData.fps,
+      resolution: streamData.resolution,
+      uptime: Date.now() - streamData.startTime.getTime(),
+      isActive: streamData.isActive
+    };
+  }
+
+  /**
+   * Test camera connection
+   */
+  async testConnection(streamUrl, timeout = 15000) {
+    return new Promise((resolve, reject) => {
+      console.log(`🔍 Testing connection to ${streamUrl.replace(/:[^:@]*@/, ':***@')}`);
+
+      // Test HTTP streams differently
+      if (streamUrl.startsWith('http://') || streamUrl.startsWith('https://')) {
+        const httpModule = streamUrl.startsWith('https://') ? https : http;
+        const request = httpModule.get(streamUrl, (response) => {
+          if (response.statusCode === 200) {
+            resolve({ success: true, message: 'HTTP connection successful' });
+          } else {
+            reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+          }
+          request.abort();
+        });
+
+        request.on('error', (error) => {
+          reject(error);
+        });
+
+        setTimeout(() => {
+          request.abort();
+          reject(new Error('Connection timeout'));
+        }, timeout);
+
+        return;
+      }
+
+      // Test RTSP with FFmpeg
+      const ffmpeg = spawn(FFMPEG_PATH, [
+        '-rtsp_transport', 'tcp',
+        '-i', streamUrl,
+        '-vframes', '1',
+        '-f', 'null',
+        '-'
+      ]);
+
+      let hasResponded = false;
+
+      const cleanup = () => {
+        if (!hasResponded) {
+          hasResponded = true;
+          try {
+            ffmpeg.kill('SIGTERM');
+          } catch (e) {
+            // Ignore
+          }
+        }
+      };
+
+      // Timeout
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('Connection timeout'));
+      }, timeout);
+
+      ffmpeg.on('close', (code) => {
+        clearTimeout(timer);
+        if (!hasResponded) {
+          hasResponded = true;
+          if (code === 0 || code === null) {
+            resolve({ success: true, message: 'Connection successful' });
+          } else {
+            reject(new Error(`Connection failed with code ${code}`));
+          }
+        }
+      });
+
+      ffmpeg.on('error', (error) => {
+        clearTimeout(timer);
+        cleanup();
+        if (!hasResponded) {
+          hasResponded = true;
+          reject(error);
+        }
+      });
+    });
+  }
+
+  // ============================================
+  // DATABASE OPERATIONS - CAMERA MANAGEMENT
+  // ============================================
+
   /**
    * Create a new camera with streaming configuration
    */
@@ -122,6 +582,59 @@ class CameraConnectionService {
   }
 
   /**
+   * Get cameras by user ID
+   */
+  async getCamerasByUser(userId, { page = 1, limit = 10, is_active, connection_status } = {}) {
+    try {
+      const offset = (page - 1) * limit;
+
+      // WHERE conditions
+      const where = { user_id: userId };
+
+      if (is_active !== undefined) {
+        where.is_active = is_active === 'true' || is_active === true;
+      }
+
+      if (connection_status) {
+        where.connection_status = connection_status;
+      }
+
+      const result = await Camera.findAndCountAll({
+        where,
+        include: [
+          {
+            model: Tenant,
+            as: "tenant",
+            attributes: ["tenant_id", "tenant_name"]
+          },
+          {
+            model: Branch,
+            as: "branch",
+            attributes: ["branch_id", "branch_name"]
+          }
+        ],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        order: [["created_at", "DESC"]]
+      });
+
+      return {
+        cameras: result.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: result.count,
+          totalPages: Math.ceil(result.count / limit)
+        }
+      };
+
+    } catch (error) {
+      console.error("Error fetching cameras by user:", error);
+      throw new Error("Failed to retrieve cameras by user");
+    }
+  }
+
+  /**
    * Get camera by ID with full details
    */
   async getCameraById(id) {
@@ -228,7 +741,10 @@ class CameraConnectionService {
         throw new Error("Cannot delete camera with existing zones. Delete zones first.");
       }
 
-      // 🆕 Note: Stream should be stopped before deletion (handled in controller)
+      // 🆕 Stop stream if active
+      if (this.isStreaming(id.toString())) {
+        this.stopStream(id.toString());
+      }
       
       await camera.destroy();
       return { 
@@ -357,7 +873,7 @@ class CameraConnectionService {
   }
 
   /**
-   * 🆕 Update camera connection status
+   * Update camera connection status
    */
   async updateConnectionStatus(id, status, errorMessage = null) {
     try {
@@ -401,7 +917,7 @@ class CameraConnectionService {
         }
       });
 
-      // 🆕 Connection status breakdown
+      // Connection status breakdown
       const connectedCameras = await Camera.count({
         where: { 
           tenant_id: tenantId,
@@ -423,7 +939,7 @@ class CameraConnectionService {
         }
       });
 
-      // 🆕 Recording enabled cameras
+      // Recording enabled cameras
       const recordingCameras = await Camera.count({
         where: { 
           tenant_id: tenantId,
@@ -447,7 +963,7 @@ class CameraConnectionService {
         group: ['branch_id', 'branch.branch_id', 'branch.branch_name']
       });
 
-      // 🆕 Cameras by protocol
+      // Cameras by protocol
       const camerasByProtocol = await Camera.findAll({
         where: { tenant_id: tenantId },
         attributes: [
@@ -486,7 +1002,7 @@ class CameraConnectionService {
             { camera_name: { [Op.like]: `%${searchTerm}%` } },
             { camera_code: { [Op.like]: `%${searchTerm}%` } },
             { location_description: { [Op.like]: `%${searchTerm}%` } },
-            { ip_address: { [Op.like]: `%${searchTerm}%` } } // 🆕 Search by IP
+            { ip_address: { [Op.like]: `%${searchTerm}%` } }
           ]
         },
         include: [
@@ -503,7 +1019,7 @@ class CameraConnectionService {
   }
 
   /**
-   * 🆕 Get cameras ready for streaming
+   * Get cameras ready for streaming
    */
   async getStreamReadyCameras(tenantId) {
     try {
@@ -530,7 +1046,7 @@ class CameraConnectionService {
   }
 
   /**
-   * 🆕 Get cameras by connection status
+   * Get cameras by connection status
    */
   async getCamerasByConnectionStatus(tenantId, status) {
     try {
@@ -553,7 +1069,7 @@ class CameraConnectionService {
   }
 
   /**
-   * 🆕 Bulk update camera connection status
+   * Bulk update camera connection status
    */
   async bulkUpdateConnectionStatus(cameraIds, status) {
     try {
@@ -583,7 +1099,7 @@ class CameraConnectionService {
   }
 
   /**
-   * 🆕 Get camera uptime report
+   * Get camera uptime report
    */
   async getCameraUptimeReport(tenantId, days = 7) {
     try {
@@ -614,7 +1130,42 @@ class CameraConnectionService {
   }
 
   /**
-   * 🆕 Build stream URL from camera configuration
+   * Get disconnected cameras that need attention
+   */
+  async getDisconnectedCameras(tenantId) {
+    try {
+      const cameras = await Camera.findAll({
+        where: {
+          tenant_id: tenantId,
+          is_active: true,
+          [Op.or]: [
+            { connection_status: 'disconnected' },
+            { connection_status: 'error' }
+          ]
+        },
+        include: [
+          { 
+            model: Branch, 
+            as: 'branch',
+            attributes: ['branch_name']
+          }
+        ],
+        order: [['last_connected_at', 'ASC']]
+      });
+
+      return cameras;
+    } catch (error) {
+      console.error("Error fetching disconnected cameras:", error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // UTILITY METHODS
+  // ============================================
+
+  /**
+   * Build stream URL from camera configuration
    */
   buildStreamUrl(camera) {
     const { protocol, username, password, ip_address, port, channel, stream_path } = camera;
@@ -638,7 +1189,7 @@ class CameraConnectionService {
   }
 
   /**
-   * 🆕 Validate camera configuration
+   * Validate camera configuration
    */
   validateCameraConfig(camera) {
     const errors = [];
@@ -670,34 +1221,11 @@ class CameraConnectionService {
   }
 
   /**
-   * 🆕 Get disconnected cameras that need attention
+   * Cleanup on service shutdown
    */
-  async getDisconnectedCameras(tenantId) {
-    try {
-      const cameras = await Camera.findAll({
-        where: {
-          tenant_id: tenantId,
-          is_active: true,
-          [Op.or]: [
-            { connection_status: 'disconnected' },
-            { connection_status: 'error' }
-          ]
-        },
-        include: [
-          { 
-            model: Branch, 
-            as: 'branch',
-            attributes: ['branch_name']
-          }
-        ],
-        order: [['last_connected_at', 'ASC']]
-      });
-
-      return cameras;
-    } catch (error) {
-      console.error("Error fetching disconnected cameras:", error);
-      throw error;
-    }
+  cleanup() {
+    console.log('🧹 Cleaning up camera connection service...');
+    this.stopAllStreams();
   }
 }
 

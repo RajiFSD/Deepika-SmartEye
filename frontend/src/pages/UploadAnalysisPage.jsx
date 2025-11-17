@@ -30,6 +30,7 @@ function UploadAnalysisPage() {
   const [liveStreamActive, setLiveStreamActive] = useState(false);
   const [liveStreamId, setLiveStreamId] = useState(null);
   const [cameraApiConnected, setCameraApiConnected] = useState(false);
+  const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
   
   // Stream configuration
   const [streamConfig, setStreamConfig] = useState({
@@ -95,7 +96,12 @@ function UploadAnalysisPage() {
 
   const loadCameras = async () => {
     try {
-      const response = await cameraService.getCameras();
+      const user_id = userId;
+      const response = await cameraService.getCamerasByuserId(user_id, {
+        page: 1,
+        limit: 100,
+        is_active: true,       
+      });
       let camerasData = [];
       
       if (response?.data?.data?.cameras) {

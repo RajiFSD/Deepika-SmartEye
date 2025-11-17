@@ -96,6 +96,8 @@ User.hasMany(ObjectCountingJob, { foreignKey: "user_id", as: "objectCountingJobs
 User.belongsTo(Branch, { foreignKey: 'branch_id', as: 'branch' });
 User.hasMany(ProductScanResult, { foreignKey: "scanned_by", as: "scannedProducts", onDelete: "SET NULL", onUpdate: "CASCADE"});
 User.hasMany(TenantProduct, { foreignKey: "user_id", as: "userProducts", onDelete: "CASCADE", onUpdate: "CASCADE"});
+User.hasMany(Camera, { foreignKey: "user_id", as: "assignedCameras" });
+
 
 // ============================================
 // Branch Associations
@@ -124,6 +126,7 @@ Camera.hasMany(DetectionAccuracy, { foreignKey: "camera_id", as: "detectionAccur
 Camera.hasMany(ObjectCountingJob, { foreignKey: "camera_id", as: "objectCountingJobs" });
 Camera.hasMany(TenantProduct, { foreignKey: "camera_id", as: "cameraProducts", onDelete: "CASCADE", onUpdate: "CASCADE" });
 Camera.hasMany(ProductScanResult, { foreignKey: "camera_id", as: "cameraScanResults", onDelete: "SET NULL", onUpdate: "CASCADE" });
+Camera.belongsTo(User, { foreignKey: "user_id", as: "assignedUser" });
 
 // ============================================
 // ZoneConfig Associations

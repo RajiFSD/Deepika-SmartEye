@@ -17,6 +17,12 @@ const Camera = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    // 🆕 Added user_id field
+    user_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: "User assigned to this camera"
+    },
     camera_name: {
       type: DataTypes.STRING(255),
       allowNull: false,
@@ -34,7 +40,7 @@ const Camera = sequelize.define(
       allowNull: true,
     },
     
-    // 🆕 Connection & Authentication
+    // Connection & Authentication
     ip_address: {
       type: DataTypes.STRING(50),
       allowNull: true,
@@ -60,7 +66,7 @@ const Camera = sequelize.define(
       defaultValue: "1",
     },
     
-    // 🆕 Stream Configuration
+    // Stream Configuration
     stream_path: {
       type: DataTypes.STRING(255),
       allowNull: true,
@@ -80,7 +86,7 @@ const Camera = sequelize.define(
       defaultValue: false,
     },
     
-    // 🆕 Connection Status & Health
+    // Connection Status & Health
     connection_status: {
       type: DataTypes.ENUM("connected", "disconnected", "error", "connecting"),
       defaultValue: "disconnected",
@@ -98,7 +104,7 @@ const Camera = sequelize.define(
       defaultValue: 0.00,
     },
     
-    // 🆕 Hardware Information
+    // Hardware Information
     manufacturer: {
       type: DataTypes.STRING(100),
       allowNull: true,
@@ -116,7 +122,7 @@ const Camera = sequelize.define(
       allowNull: true,
     },
     
-    // 🆕 PTZ Capabilities
+    // PTZ Capabilities
     ptz_enabled: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
@@ -134,7 +140,7 @@ const Camera = sequelize.define(
       defaultValue: 0,
     },
     
-    // 🆕 AI Processing Configuration
+    // AI Processing Configuration
     ai_processing_enabled: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
@@ -168,7 +174,7 @@ const Camera = sequelize.define(
       defaultValue: "1920x1080",
     },
     
-    // 🆕 Metadata
+    // Metadata
     notes: {
       type: DataTypes.TEXT,
       allowNull: true,
@@ -205,6 +211,10 @@ const Camera = sequelize.define(
       {
         name: "idx_branch_camera",
         fields: ["branch_id", "camera_id"],
+      },
+      {
+        name: "idx_user_camera",
+        fields: ["user_id"],
       },
       {
         name: "idx_is_active",
@@ -298,9 +308,5 @@ Camera.prototype.getStreamConfig = function() {
   };
 };
 
-// Define associations (add these after all models are defined)
-// Camera.belongsTo(Tenant, { foreignKey: 'tenant_id', as: 'tenant' });
-// Camera.belongsTo(Branch, { foreignKey: 'branch_id', as: 'branch' });
-// Camera.hasMany(ZoneConfig, { foreignKey: 'camera_id', as: 'zones' });
 
 module.exports = Camera;

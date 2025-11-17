@@ -11,6 +11,7 @@ function AlertThresholdPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
   
   const [newThreshold, setNewThreshold] = useState({
     camera_id: '',
@@ -22,7 +23,12 @@ function AlertThresholdPage() {
   useEffect(() => {
     const fetchCameras = async () => {
       try {
-        const response = await cameraService.getCameras({ limit: 100 });
+        const user_id = userId;
+        const response = await cameraService.getCamerasByuserId(user_id, {
+        page: 1,
+        limit: 100,
+        is_active: true,       
+      });
         if (response?.data?.cameras) {
           setCameras(response.data.cameras);
         } else if (response?.data?.rows) {

@@ -86,6 +86,7 @@ getUsersbyBranchId: async (params = {}) => {
   // Create user
   createUser: async (userData) => {
     try {
+      console.log('🔵 Creating user:', userData);
       const response = await api.post('/admin/users', userData);
       return response.data;
     } catch (error) {

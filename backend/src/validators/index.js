@@ -118,33 +118,140 @@ const branchValidator = {
   }).min(1)
 };
 
-// Camera Validators
+// 🆕 Camera Validators - UPDATED with user_id and all new fields
 const cameraValidator = {
   create: Joi.object({
     tenant_id: commonValidators.id,
     branch_id: commonValidators.id,
+    user_id: commonValidators.optionalId, // 🆕 Added user_id
     camera_name: commonValidators.name.required(),
     camera_code: Joi.string().alphanum().min(2).max(50).required(),
     camera_type: Joi.string().valid('IP', 'USB', 'RTSP', 'DVR', 'NVR').default('IP'),
     stream_url: commonValidators.url.optional().allow(''),
+    
+    // 🆕 Connection & Authentication fields
+    ip_address: commonValidators.ipAddress.optional(),
+    port: Joi.string().max(10).default('554'),
+    username: Joi.string().max(100).optional().allow(''),
+    password: Joi.string().max(255).optional().allow(''),
+    protocol: Joi.string().valid('RTSP', 'HTTP', 'RTMP', 'ONVIF', 'HLS').default('RTSP'),
+    channel: Joi.string().max(10).default('1'),
+    stream_path: Joi.string().max(255).optional().allow(''),
+    secondary_stream_url: commonValidators.url.optional().allow(''),
+    
+    // 🆕 Status and features
+    recording_enabled: commonValidators.boolean.default(false),
+    motion_detection_enabled: commonValidators.boolean.default(false),
+    connection_status: Joi.string().valid('connected', 'disconnected', 'error', 'connecting').default('disconnected'),
+    
+    // 🆕 Hardware info
+    manufacturer: Joi.string().max(100).optional().allow(''),
+    model: Joi.string().max(100).optional().allow(''),
+    firmware_version: Joi.string().max(50).optional().allow(''),
+    mac_address: Joi.string().max(20).optional().allow(''),
+    
+    // 🆕 PTZ
+    ptz_enabled: commonValidators.boolean.default(false),
+    zoom_level: Joi.number().integer().min(1).default(1),
+    pan_position: Joi.number().integer().default(0),
+    tilt_position: Joi.number().integer().default(0),
+    
+    // 🆕 AI Processing
+    ai_processing_enabled: commonValidators.boolean.default(true),
+    processing_fps: Joi.number().integer().min(1).max(60).default(1),
+    detection_zones: Joi.object().optional(),
+    
+    // Original fields
     location_description: commonValidators.text.optional().allow(''),
     is_active: commonValidators.boolean.default(true),
     fps: Joi.number().integer().min(1).max(60).default(25),
-    resolution: Joi.string().pattern(/^\d+x\d+$/).default('1920x1080')
+    resolution: Joi.string().pattern(/^\d+x\d+$/).default('1920x1080'),
+    
+    // 🆕 Metadata
+    notes: commonValidators.text.optional().allow(''),
+    tags: Joi.string().max(500).optional().allow('')
   }),
 
-update: Joi.object({
-    tenant_id: commonValidators.optionalId,      // ← Added
-    branch_id: commonValidators.optionalId,      // ← Added (fixes your error!)
+  update: Joi.object({
+    tenant_id: commonValidators.optionalId,
+    branch_id: commonValidators.optionalId,
+    user_id: commonValidators.optionalId.allow(null), // 🆕 Added user_id (allow null for unassignment)
     camera_name: commonValidators.name.optional(),
     camera_code: Joi.string().alphanum().min(2).max(50).optional(),
     camera_type: Joi.string().valid('IP', 'USB', 'RTSP', 'DVR', 'NVR').optional(),
     stream_url: commonValidators.url.optional().allow(''),
+    
+    // 🆕 Connection & Authentication fields
+    ip_address: commonValidators.ipAddress.optional(),
+    port: Joi.string().max(10).optional(),
+    username: Joi.string().max(100).optional().allow(''),
+    password: Joi.string().max(255).optional().allow(''),
+    protocol: Joi.string().valid('RTSP', 'HTTP', 'RTMP', 'ONVIF', 'HLS').optional(),
+    channel: Joi.string().max(10).optional(),
+    stream_path: Joi.string().max(255).optional().allow(''),
+    secondary_stream_url: commonValidators.url.optional().allow(''),
+    
+    // 🆕 Status and features
+    recording_enabled: commonValidators.boolean.optional(),
+    motion_detection_enabled: commonValidators.boolean.optional(),
+    connection_status: Joi.string().valid('connected', 'disconnected', 'error', 'connecting').optional(),
+    last_connected_at: commonValidators.date.optional(),
+    last_error_message: Joi.string().optional().allow(''),
+    uptime_percentage: Joi.number().min(0).max(100).optional(),
+    
+    // 🆕 Hardware info
+    manufacturer: Joi.string().max(100).optional().allow(''),
+    model: Joi.string().max(100).optional().allow(''),
+    firmware_version: Joi.string().max(50).optional().allow(''),
+    mac_address: Joi.string().max(20).optional().allow(''),
+    
+    // 🆕 PTZ
+    ptz_enabled: commonValidators.boolean.optional(),
+    zoom_level: Joi.number().integer().min(1).optional(),
+    pan_position: Joi.number().integer().optional(),
+    tilt_position: Joi.number().integer().optional(),
+    
+    // 🆕 AI Processing
+    ai_processing_enabled: commonValidators.boolean.optional(),
+    processing_fps: Joi.number().integer().min(1).max(60).optional(),
+    detection_zones: Joi.object().optional(),
+    
+    // Original fields
     location_description: commonValidators.text.optional().allow(''),
     is_active: commonValidators.boolean.optional(),
     fps: Joi.number().integer().min(1).max(60).optional(),
-    resolution: Joi.string().pattern(/^\d+x\d+$/).optional()
+    resolution: Joi.string().pattern(/^\d+x\d+$/).optional(),
+    
+    // 🆕 Metadata
+    notes: commonValidators.text.optional().allow(''),
+    tags: Joi.string().max(500).optional().allow('')
   }).min(1)
+};
+
+// 🆕 Camera Bulk Operations Validators
+const cameraBulkValidator = {
+  bulkAssign: Joi.object({
+    camera_ids: Joi.array().items(commonValidators.id).min(1).max(100).required(),
+    user_id: commonValidators.optionalId.allow(null), // Allow null for unassignment
+    tenant_id: commonValidators.id
+  }),
+
+  bulkUpdateStatus: Joi.object({
+    camera_ids: Joi.array().items(commonValidators.id).min(1).max(100).required(),
+    is_active: commonValidators.boolean.required()
+  }),
+
+  bulkUpdateConnection: Joi.object({
+    camera_ids: Joi.array().items(commonValidators.id).min(1).max(100).required(),
+    connection_status: Joi.string().valid('connected', 'disconnected', 'error', 'connecting').required()
+  })
+};
+
+// 🆕 Camera Assignment Validator
+const cameraAssignmentValidator = {
+  assign: Joi.object({
+    user_id: commonValidators.optionalId.allow(null) // Allow null for unassignment
+  })
 };
 
 // Zone Validators
@@ -154,12 +261,11 @@ const zoneValidator = {
     tenant_id: commonValidators.id,
     zone_name: Joi.string().max(255).default('Entry/Exit Zone'),
     polygon_json: commonValidators.coordinates.required(),
-    //direction_line_json: commonValidators.coordinates.optional(),
     direction_line_json: Joi.alternatives().try(
-  commonValidators.coordinates,
-  Joi.array().max(0), // Allow empty arrays
-  Joi.any().valid(null) // Allow null
-).optional().default([]),
+      commonValidators.coordinates,
+      Joi.array().max(0), // Allow empty arrays
+      Joi.any().valid(null) // Allow null
+    ).optional().default([]),
     entry_direction: Joi.string().valid('UP', 'DOWN', 'LEFT', 'RIGHT').default('UP'),
     is_active: commonValidators.boolean.default(true),
     created_by: commonValidators.optionalId
@@ -168,12 +274,11 @@ const zoneValidator = {
   update: Joi.object({
     zone_name: Joi.string().max(255).optional(),
     polygon_json: commonValidators.coordinates.optional(),
-    //direction_line_json: commonValidators.coordinates.optional(),
     direction_line_json: Joi.alternatives().try(
-  commonValidators.coordinates,
-  Joi.array().max(0), // Allow empty arrays
-  Joi.any().valid(null) // Allow null
-).optional().default([]),
+      commonValidators.coordinates,
+      Joi.array().max(0), // Allow empty arrays
+      Joi.any().valid(null) // Allow null
+    ).optional().default([]),
     entry_direction: Joi.string().valid('UP', 'DOWN', 'LEFT', 'RIGHT').optional(),
     is_active: commonValidators.boolean.optional()
   }).min(1)
@@ -376,12 +481,18 @@ const queryValidator = {
     end_date: commonValidators.date.required()
   }),
 
+  // 🆕 Updated Camera Query Validator with user_id
   cameraQuery: Joi.object({
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(10),
     is_active: commonValidators.boolean.optional(),
     branch_id: commonValidators.optionalId,
-    tenant_id: commonValidators.optionalId
+    tenant_id: commonValidators.optionalId,
+    user_id: commonValidators.optionalId, // 🆕 Added user_id filter
+    connection_status: Joi.string().valid('connected', 'disconnected', 'error', 'connecting').optional(),
+    with_stream_status: commonValidators.boolean.optional(),
+    sort: Joi.string().optional(),
+    order: Joi.string().valid('ASC', 'DESC').default('DESC')
   }),
 
   peopleCountQuery: Joi.object({
@@ -442,6 +553,7 @@ const rolePluginValidator = Joi.object({
 
 const productConfigValidator = {
   create: Joi.object({
+    name: Joi.string().max(100).required(),
     product_id: commonValidators.id,
     layers_count: Joi.number().integer().min(1),
     racks_per_layer: Joi.number().integer().min(1),
@@ -449,9 +561,11 @@ const productConfigValidator = {
     box_capacity: Joi.number().integer().optional(),
     bottle_ml: Joi.number().integer().optional(),
     arrangement_type: Joi.string().max(100).optional(),
-    tolerance_limit: Joi.number().integer().default(0),
+    tolerance_limit: Joi.number().integer().default(0),    
+    is_active: commonValidators.boolean.default(true)
   }),
   update: Joi.object({
+    name: Joi.string().max(100).optional(),
     layers_count: Joi.number().integer().optional(),
     racks_per_layer: Joi.number().integer().optional(),
     items_per_rack: Joi.number().integer().optional(),
@@ -459,6 +573,7 @@ const productConfigValidator = {
     bottle_ml: Joi.number().integer().optional(),
     arrangement_type: Joi.string().max(100).optional(),
     tolerance_limit: Joi.number().integer().optional(),
+    is_active: commonValidators.boolean.optional()
   }).min(1),
 };
 
@@ -470,6 +585,7 @@ const productValidator = {
     size: Joi.string().max(100).optional().allow(""),
     description: Joi.string().optional().allow(""),
     uom: Joi.string().max(50).optional().allow(""),
+    is_active: commonValidators.boolean.default(true),
   }),
   update: Joi.object({
     product_name: commonValidators.name.optional(),
@@ -478,6 +594,7 @@ const productValidator = {
     size: Joi.string().max(100).optional(),
     description: Joi.string().optional(),
     uom: Joi.string().max(50).optional(),
+    is_active: commonValidators.boolean.optional(),
   }).min(1),
 };
 
@@ -535,9 +652,13 @@ module.exports = {
   userValidator,
   tenantValidator,
   branchValidator,
-  cameraValidator,
+  cameraValidator, // 🆕 Updated with user_id
   zoneValidator,
   rolePluginValidator,
+  
+  // 🆕 Camera Specific Validators
+  cameraBulkValidator,
+  cameraAssignmentValidator,
   
   // Business Logic
   alertThresholdValidator,
@@ -560,7 +681,7 @@ module.exports = {
   // Common validators for reuse
   commonValidators,
 
-  //Products Validators
+  // Products Validators
   productConfigValidator,
   productValidator,
   tenantProductValidator,

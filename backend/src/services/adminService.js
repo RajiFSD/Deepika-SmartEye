@@ -3,72 +3,7 @@ const bcrypt = require('bcryptjs');
 const { Op } = require('sequelize');
 
 class AdminService {
-  /**
-   * Get all users with branch and tenant info
-   */
-  // async getUsers({ page = 1, limit = 100, search = '', role = '', tenantId = null }) {
-  //   try {
-  //     const offset = (page - 1) * limit;
-  //     const whereClause = {};
-
-  //     if (search) {
-  //       whereClause[Op.or] = [
-  //         { full_name: { [Op.like]: `%${search}%` } },
-  //         { email: { [Op.like]: `%${search}%` } },
-  //         { username: { [Op.like]: `%${search}%` } }
-  //       ];
-  //     }
-
-  //     if (role && role !== 'all') {
-  //       whereClause.role_id = role;
-  //     }
-
-  //     if (tenantId) {
-  //       whereClause.tenant_id = tenantId;
-  //     }
-
-  //     const { count, rows } = await User.findAndCountAll({
-  //       where: whereClause,
-  //       limit,
-  //       offset,
-  //       order: [['created_at', 'DESC']],
-  //       attributes: { exclude: ['password_hash'] },
-  //       include: [
-  //         {
-  //           model: Tenant,
-  //           as: 'tenant',
-  //           attributes: ['tenant_id', 'tenant_name', 'tenant_code']
-  //         },
-  //         {
-  //           model: Branch,
-  //           as: 'branch',
-  //           attributes: ['branch_id', 'branch_name', 'branch_code', 'city'],
-  //           required: false
-  //         },
-  //         {
-  //           model: RolePlugin,
-  //           as: 'role',
-  //           attributes: ['role_id', 'role_name', 'screen_name'],
-  //           required: false
-  //         }
-  //       ]
-  //     });
-
-  //     return {
-  //       users: rows,
-  //       pagination: {
-  //         total: count,
-  //         page: parseInt(page),
-  //         limit: parseInt(limit),
-  //         totalPages: Math.ceil(count / limit)
-  //       }
-  //     };
-  //   } catch (error) {
-  //     console.error('Error fetching users:', error);
-  //     throw new Error('Failed to fetch users');
-  //   }
-  // }
-
+ 
   async getUsers({ 
   page = 1, 
   limit = 100, 

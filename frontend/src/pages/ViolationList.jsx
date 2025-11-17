@@ -13,6 +13,7 @@ function ViolationList() {
   const [selectedLog, setSelectedLog] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 50,
@@ -23,7 +24,12 @@ function ViolationList() {
   useEffect(() => {
     const fetchCameras = async () => {
       try {
-        const response = await cameraService.getCameras({ limit: 100 });
+        const user_id = userId;
+        const response = await cameraService.getCamerasByuserId(user_id, {
+        page: 1,
+        limit: 100,
+        is_active: true,       
+      });
         
         // Handle both response structures: data.cameras or data.rows
         if (response?.data?.cameras) {

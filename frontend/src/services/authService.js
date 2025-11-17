@@ -13,6 +13,7 @@ const authService = {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
     localStorage.removeItem('tenantId');
+    localStorage.removeItem('userId');
     
     const response = await api.post('/auth/login', { email, password });      
     
@@ -22,11 +23,13 @@ const authService = {
     localStorage.setItem('authToken', token);
     localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('userId', user.user_id);
    
     const tenantData = user.tenant.tenant_id;
     localStorage.setItem('tenantId', tenantData); 
 
-    console.log("Login response--", response.data);
+    //console.log("Login response--", response.data);
+    
     
     return response.data;
   } catch (error) {
@@ -55,6 +58,7 @@ const authService = {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
     localStorage.removeItem('tenantId');
+    localStorage.removeItem('userId');
   };
 
   try {

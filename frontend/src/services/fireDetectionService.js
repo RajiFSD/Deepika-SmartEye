@@ -6,6 +6,7 @@ class FireDetectionService {
   /**
    * Start fire detection on a camera
    */
+  
   async startDetection(cameraId, settings = {}) {
     try {
       const response = await fetch(`${API_BASE_URL}/fire-detection/start`, {
@@ -66,6 +67,7 @@ class FireDetectionService {
    */
   async getAlerts(filters = {}) {
     try {
+      console.log('Fetching fire alerts with filters:', filters);
       const params = new URLSearchParams();
       
       if (filters.camera_id) params.append('camera_id', filters.camera_id);
@@ -73,17 +75,18 @@ class FireDetectionService {
       if (filters.from_date) params.append('from_date', filters.from_date);
       if (filters.to_date) params.append('to_date', filters.to_date);
       if (filters.limit) params.append('limit', filters.limit);
-
-      const response = await fetch(`${API_BASE_URL}/fire-alerts?${params}`, {
+    
+      const response = await fetch(`${API_BASE_URL}/fire-detection?${params}`, {
         headers: {
           'Authorization': `Bearer ${this.getToken()}`
         }
       });
+      console.log("Get Alerts Response---",response);
 
       if (!response.ok) {
         // Return empty data for 404 instead of throwing
         if (response.status === 404) {
-          console.warn('Fire alerts endpoint not found (404). This endpoint may not be implemented yet.');
+          console.warn('Fire detetction endpoint not found (404). This endpoint may not be implemented yet.');
           return { success: true, data: [] };
         }
         const errorData = await response.json().catch(() => ({}));
@@ -195,7 +198,7 @@ class FireDetectionService {
    */
   async resolveAlert(alertId, notes = '') {
     try {
-      const response = await fetch(`${API_BASE_URL}/fire-alerts/${alertId}/resolve`, {
+      const response = await fetch(`${API_BASE_URL}/fire-detection/${alertId}/resolve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -221,7 +224,7 @@ class FireDetectionService {
    */
   async markFalsePositive(alertId, reason = '') {
     try {
-      const response = await fetch(`${API_BASE_URL}/fire-alerts/${alertId}/false-positive`, {
+      const response = await fetch(`${API_BASE_URL}/fire-detection/${alertId}/false-positive`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -247,7 +250,7 @@ class FireDetectionService {
    */
   async getAlertDetails(alertId) {
     try {
-      const response = await fetch(`${API_BASE_URL}/fire-alerts/${alertId}`, {
+      const response = await fetch(`${API_BASE_URL}/fire-detection/${alertId}`, {
         headers: {
           'Authorization': `Bearer ${this.getToken()}`
         }
@@ -270,7 +273,7 @@ class FireDetectionService {
    */
   async downloadSnapshot(alertId) {
     try {
-      const response = await fetch(`${API_BASE_URL}/fire-alerts/${alertId}/snapshot`, {
+      const response = await fetch(`${API_BASE_URL}/fire-detection/${alertId}/snapshot`, {
         headers: {
           'Authorization': `Bearer ${this.getToken()}`
         }
@@ -382,13 +385,57 @@ class FireDetectionService {
     }
   }
 
+
+ async getCameras_smoke(filters = {}) {
+  try {
+    const { user_id, ...rest } = filters;
+
+    if (!user_id) {
+      throw new Error("user_id is required");
+    }
+
+    const params = new URLSearchParams();
+
+    if (rest.page) params.append('page', rest.page);
+    if (rest.limit) params.append('limit', rest.limit);
+    if (rest.is_active !== undefined) params.append('is_active', rest.is_active);
+    if (rest.connection_status) params.append('connection_status', rest.connection_status);
+    if (rest.tenant_id) params.append('tenant_id', rest.tenant_id);
+
+    console.log("need to write whole api ",API_BASE_URL,user_id,params.toString());
+
+    const response = await fetch(`${API_BASE_URL}/cameras/user/${user_id}?${params}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.getToken()}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+
+  } catch (error) {
+    console.error('Get user cameras error:', error);
+    throw error;
+  }
+}
+
+
   /**
    * Get authentication token
    */
   getToken() {
     // Adjust based on your auth implementation
-    return localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+    return localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
   }
+
+
+  
 
   /**
    * Build image URL

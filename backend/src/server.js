@@ -186,6 +186,40 @@ class Server {
       });
     });
 
+       // Test FFmpeg availability - ADD THIS
+    this.app.get('/api/test-ffmpeg', (req, res) => {
+      const { spawn } = require('child_process');
+      const ffmpeg = spawn('ffmpeg', ['-version']);
+      
+      let output = '';
+      ffmpeg.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      ffmpeg.on('close', (code) => {
+        if (code === 0) {
+          res.json({ 
+            success: true, 
+            message: 'FFmpeg is available',
+            version: output.split('\n')[0]
+          });
+        } else {
+          res.json({ 
+            success: false, 
+            message: 'FFmpeg check failed'
+          });
+        }
+      });
+      
+      ffmpeg.on('error', (error) => {
+        res.status(500).json({ 
+          success: false, 
+          message: 'FFmpeg not found: ' + error.message 
+        });
+      });
+    });
+
+
     // Root endpoint
     this.app.get('/', (req, res) => {
       res.json({

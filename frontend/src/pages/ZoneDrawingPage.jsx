@@ -20,6 +20,7 @@ function ZoneDrawingPage() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [entryDirection, setEntryDirection] = useState('UP');
   const [drawingMode, setDrawingMode] = useState('zone'); // 'zone' or 'direction'
+  const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
 
   const user = authService.getCurrentUser();
 
@@ -32,11 +33,11 @@ function ZoneDrawingPage() {
     try {
       setLoading(true);
       setError('');
-      
-      const response = await cameraService.getCameras({
+      const user_id = userId;
+      const response = await cameraService.getCamerasByuserId(user_id, {
         page: 1,
         limit: 100,
-        is_active: true,
+        is_active: true,       
       });
       
       console.log('📊 Camera response:', response);

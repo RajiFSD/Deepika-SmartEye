@@ -5,6 +5,8 @@ const { spawn } = require('child_process');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs').promises;
+const { Camera } = require('@models'); // Add this to get camera details
+const cameraConnectionService = require('../services/cameraConnectionService');
 
 // Configure multer for file uploads
 const upload = multer({ 
@@ -39,9 +41,34 @@ router.post('/start', async (req, res) => {
     }
 
     // Get camera details from database
-    // const camera = await db.query('SELECT * FROM cameras WHERE id = ?', [camera_id]);
-    // For now, using mock data
-    const streamUrl = `http://192.168.31.89:8080/video`; // Replace with actual camera stream
+    let camera;
+    try {
+      camera = await Camera.findByPk(camera_id);
+      if (!camera) {
+        return res.status(404).json({
+          success: false,
+          message: 'Camera not found'
+        });
+      }
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch camera details'
+      });
+    }
+
+    // Build stream URL from camera
+    const streamUrl = camera.stream_url || camera.buildStreamUrl();
+    
+    if (!streamUrl) {
+      return res.status(400).json({
+        success: false,
+        message: 'Camera has no valid stream URL configured'
+      });
+    }
+
+    console.log(`🔥 Starting fire detection for camera ${camera_id}: ${camera.camera_name}`);
 
     // Spawn Python fire detection process
     const pythonProcess = spawn('python', [
@@ -58,6 +85,7 @@ router.post('/start', async (req, res) => {
     activeDetections.set(camera_id, {
       process: pythonProcess,
       startTime: new Date(),
+      camera: camera.camera_name,
       settings: { sensitivity, min_confidence, alert_sound, email_alert }
     });
 
@@ -90,6 +118,7 @@ router.post('/start', async (req, res) => {
       success: true,
       message: 'Fire detection started',
       camera_id,
+      camera_name: camera.camera_name,
       settings: { sensitivity, min_confidence }
     });
 
@@ -157,6 +186,7 @@ router.get('/status/:cameraId', (req, res) => {
     success: true,
     is_active: true,
     camera_id: cameraId,
+    camera_name: detection.camera,
     start_time: detection.startTime,
     settings: detection.settings,
     uptime_seconds: Math.floor((Date.now() - detection.startTime) / 1000)
@@ -164,10 +194,10 @@ router.get('/status/:cameraId', (req, res) => {
 });
 
 /**
- * GET FIRE ALERTS
- * GET /api/fire-alerts
+ * GET FIRE ALERTS (FIXED ROUTE)
+ * GET /api/fire-detection (changed from /fire-alerts)
  */
-router.get('/fire-alerts', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { camera_id, status, from_date, to_date, limit = 50 } = req.query;
 
@@ -201,11 +231,11 @@ router.get('/fire-alerts', async (req, res) => {
     // Execute query (pseudo-code, adjust for your DB)
     // const alerts = await db.query(query, params);
 
-    // Mock response
+    // Mock response for now
     const alerts = [
       {
         id: 1,
-        camera_id: 'cam_1',
+        camera_id: camera_id || 'cam_1',
         camera_name: 'Main Entrance',
         timestamp: new Date(Date.now() - 300000).toISOString(),
         confidence: 0.92,
@@ -215,7 +245,7 @@ router.get('/fire-alerts', async (req, res) => {
       },
       {
         id: 2,
-        camera_id: 'cam_2',
+        camera_id: camera_id || 'cam_2',
         camera_name: 'Warehouse',
         timestamp: new Date(Date.now() - 120000).toISOString(),
         confidence: 0.85,
@@ -253,12 +283,12 @@ router.get('/stats', async (req, res) => {
     // Mock response
     const stats = {
       total_alerts: 45,
-      active_alerts: 2,
+      active_alerts: activeDetections.size,
       resolved_alerts: 38,
       false_positives: 5,
       avg_confidence: 87.5,
       alerts_today: 8,
-      cameras_monitored: 3,
+      cameras_monitored: activeDetections.size,
       active_detections: activeDetections.size
     };
 
@@ -313,9 +343,9 @@ router.get('/analytics/hourly', async (req, res) => {
 
 /**
  * RESOLVE FIRE ALERT
- * POST /api/fire-alerts/:alertId/resolve
+ * POST /api/fire-detection/:alertId/resolve
  */
-router.post('/fire-alerts/:alertId/resolve', async (req, res) => {
+router.post('/:alertId/resolve', async (req, res) => {
   try {
     const { alertId } = req.params;
     const { notes } = req.body;
@@ -341,9 +371,9 @@ router.post('/fire-alerts/:alertId/resolve', async (req, res) => {
 
 /**
  * MARK AS FALSE POSITIVE
- * POST /api/fire-alerts/:alertId/false-positive
+ * POST /api/fire-detection/:alertId/false-positive
  */
-router.post('/fire-alerts/:alertId/false-positive', async (req, res) => {
+router.post('/:alertId/false-positive', async (req, res) => {
   try {
     const { alertId } = req.params;
     const { reason } = req.body;
@@ -413,6 +443,42 @@ router.post('/test', upload.single('image'), async (req, res) => {
 
   } catch (error) {
     console.error('Test image error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+/**
+ * GET ALERT DETAILS
+ * GET /api/fire-detection/:alertId
+ */
+router.get('/:alertId', async (req, res) => {
+  try {
+    const { alertId } = req.params;
+
+    // Fetch from database
+    // const alert = await db.query('SELECT * FROM fire_alerts WHERE id = ?', [alertId]);
+
+    // Mock response
+    const alert = {
+      id: alertId,
+      camera_id: 'cam_1',
+      camera_name: 'Main Entrance',
+      timestamp: new Date(Date.now() - 300000).toISOString(),
+      confidence: 0.92,
+      status: 'active',
+      snapshot_path: '/alerts/snapshot_1.jpg'
+    };
+
+    res.json({
+      success: true,
+      data: alert
+    });
+
+  } catch (error) {
+    console.error('Get alert details error:', error);
     res.status(500).json({ 
       success: false, 
       message: error.message 

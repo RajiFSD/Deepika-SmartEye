@@ -188,7 +188,7 @@ class AdminController {
   // Create new user
   async createUser(req, res) {
     try {
-      const { username, email, password, full_name, role, tenant_id, is_active } = req.body;
+      const { username, email, password, full_name, role, tenant_id, branch_id ,is_active } = req.body;
 
       // Validate required fields
       if (!username || !email || !password || !tenant_id) {
@@ -217,6 +217,8 @@ class AdminController {
         full_name,
         role: role || 'viewer',
         tenant_id,
+        branch_id,
+
         is_active: is_active !== undefined ? is_active : true
       });
 

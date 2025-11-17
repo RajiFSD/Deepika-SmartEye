@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Settings, Upload, AlertCircle, FileText, 
   LogOut, Users, Menu, X, Camera, Building2, UserSquare2, Flame, Bell, Activity, 
-  ChevronDown, ChevronRight, Shield, Package } from 'lucide-react';
+  ChevronDown, ChevronRight, Shield, Package , FileSpreadsheet} from 'lucide-react';
 import { useState } from 'react';
 import authService from '../services/authService';
 
@@ -83,6 +83,15 @@ function PluginWrapper({ setIsAuthenticated }) {
       label: 'Object Counting',
       items: [
         { path: '/object-counter', icon: UserSquare2, label: 'Object Counter' }
+     
+      ]
+    },
+       {
+      id: 'testStream',
+      icon: FileSpreadsheet,
+      label: 'Test Live Stream',
+      items: [
+        { path: '/test-stream', icon: Flame, label: 'Live Stream' }
      
       ]
     },
