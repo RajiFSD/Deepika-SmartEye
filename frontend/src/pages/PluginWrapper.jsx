@@ -49,11 +49,12 @@ function PluginWrapper({ setIsAuthenticated }) {
       icon: Users,
       label: 'People Counting',
       items: [
-        { path: '/zone-config', icon: Settings, label: 'Zone Configuration' },
-        { path: '/violations', icon: Users, label: 'Detection Logs' },
+        { path: '/zone-config', icon: Settings, label: 'Zone Config' },
+        { path: '/peoplecounter', icon: Users, label: 'People Count' },       
         { path: '/upload', icon: Upload, label: 'Upload & Analyze' },
         { path: '/alerts', icon: AlertCircle, label: 'Alert Settings' },
-        { path: '/camera-live', icon: Camera, label: 'Live View' },        
+        { path: '/camera-live', icon: Camera, label: 'Live View' },
+        { path: '/violations', icon: Users, label: 'Detection Logs' },        
       ]
     },
     {

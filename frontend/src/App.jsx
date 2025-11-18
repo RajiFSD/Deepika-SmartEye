@@ -11,13 +11,14 @@ import ReportsPage from './pages/ReportsPage';
 import PluginWrapper from './pages/PluginWrapper';
 import CameraLiveViewPage from './pages/CameraLiveViewPage';
 import ObjectCounterPage from './pages/ObjectCounterPage';
+import PeopleCounter from './pages/PeopleCounter';
 
 // Product Detection Pages
 import ProductOverviewPage from './pages/ProductOverviewPage';
 import ProductCatalogPage from './pages/ProductCatalogPage';
 import ProductDetectionLogsPage from './pages/ProductDetectionLogsPage';
 import ProductAnalyticsPage from './pages/ProductAnalyticsPage';
-import FireDetectionPage from './smokepages/FireDetectionPage';
+
 
 // Admin Pages
 import AdminLoginPage from './adminPages/AdminLoginPage';
@@ -36,6 +37,8 @@ import ProductConfigPage from './adminPages/ProductConfigPage';
 import ProductTenantMappingPage from './adminPages/ProductTenantMappingPage';
 
 import TestCameraStream from './smokepages/TestCameraStream';
+import FireDetectionPage from './smokepages/FireDetectionPage';
+import LiveFireDetectionOverlay from './smokepages/LiveFireDetectionOverlay';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -151,6 +154,7 @@ function App() {
           
           {/* People Counting Module */}
           <Route path="zone-config" element={<ZoneDrawingPage />} />
+          <Route path="peoplecounter" element={<PeopleCounter />} />
           <Route path="violations" element={<ViolationList />} />
           <Route path="upload" element={<UploadAnalysisPage />} />
           <Route path="alerts" element={<AlertThresholdPage />} />

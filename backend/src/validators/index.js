@@ -638,6 +638,51 @@ const productScanValidator = {
   }),
 };
 
+const fireAlertValidator = {
+  create: Joi.object({
+    camera_id: commonValidators.id,
+    tenant_id: commonValidators.id,
+    branch_id: commonValidators.id,
+
+    user_id: commonValidators.optionalId,
+
+    alert_timestamp: Joi.date().required(),
+
+    confidence: Joi.number().min(0).max(100).required(),
+
+    snapshot_path: Joi.string().max(500).optional(),
+    video_path: Joi.string().max(500).optional(),
+
+    fire_type: Joi.string()
+      .valid("smoke", "flame", "both")
+      .default("flame"),
+
+    severity: Joi.string()
+      .valid("low", "medium", "high", "critical")
+      .default("high"),
+
+    status: Joi.string()
+      .valid("triggered", "active", "reviewed", "false_positive", "resolved")
+      .default("active"),
+
+    remarks: Joi.string().optional()
+  }),
+
+  update: Joi.object({
+    status: Joi.string().valid("active", "resolved", "false_positive").optional(),
+
+    confidence: Joi.number().min(0).max(100).optional(),
+
+    resolved_at: Joi.date().optional(),
+
+    remarks: Joi.string().optional(),
+
+    video_path: Joi.string().optional(),
+    snapshot_path: Joi.string().optional()
+  }).min(1)
+};
+
+
 // Export all validators
 module.exports = {
   // Auth
@@ -686,4 +731,6 @@ module.exports = {
   productValidator,
   tenantProductValidator,
   productScanValidator,
+
+  fireAlertValidator,
 };

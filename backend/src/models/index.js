@@ -22,6 +22,7 @@ const Product = require("./Product");
 const ProductConfiguration = require("./ProductConfiguration");
 const TenantProduct = require("./TenantProduct");
 const ProductScanResult = require("./ProductScanResult");
+const FireAlert = require("./fireAlert.model");
 
 // ✅ Verify all models are loaded
 console.log('📦 Verifying models loaded:', {
@@ -53,6 +54,7 @@ const models = {
   ProductConfiguration,
   TenantProduct,
   ProductScanResult,
+  FireAlert,
 };
 
 // ✅ ============================================
@@ -182,6 +184,20 @@ PluginJob.belongsTo(Camera, { foreignKey: "camera_id", as: "camera" });
 // ============================================
 DetectionAccuracy.belongsTo(Camera, { foreignKey: "camera_id", as: "camera" });
 DetectionAccuracy.belongsTo(Tenant, { foreignKey: "tenant_id", as: "tenant" });
+
+
+// FireAlert Associations
+FireAlert.belongsTo(Camera, { foreignKey: "camera_id", as: "camera" });
+FireAlert.belongsTo(Tenant, { foreignKey: "tenant_id", as: "tenant" });
+FireAlert.belongsTo(Branch, { foreignKey: "branch_id", as: "branch" });
+FireAlert.belongsTo(User, { foreignKey: "user_id", as: "user" });
+
+Camera.hasMany(FireAlert, { foreignKey: "camera_id", as: "fire_alerts" });
+Tenant.hasMany(FireAlert, { foreignKey: "tenant_id", as: "fire_alerts" });
+Branch.hasMany(FireAlert, { foreignKey: "branch_id", as: "fire_alerts" });
+User.hasMany(FireAlert, { foreignKey: "user_id", as: "resolved_alerts" });
+
+
 
 // ============================================
 // ObjectCountingJob Associations

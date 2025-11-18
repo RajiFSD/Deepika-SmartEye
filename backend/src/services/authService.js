@@ -67,6 +67,7 @@ class AuthService {
           role_id: user.role_id,
           role: roleInfo?.role_name || null, // ✅ Return role name string
           role_details: roleInfo, // ✅ Full role object with screens
+          branch_id: user.branch_id,
           tenant: user.tenant ? {
             tenant_id: user.tenant.tenant_id,
             tenant_name: user.tenant.tenant_name,

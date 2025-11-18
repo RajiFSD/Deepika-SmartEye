@@ -7,8 +7,9 @@ class FireDetectionService {
    * Start fire detection on a camera
    */
   
-  async startDetection(cameraId, settings = {}) {
+  async startDetection(cameraId, userId, tenantId, branchId ,settings = {}) {
     try {
+      console.log('Starting detection on camera:', cameraId, 'with settings',settings);
       const response = await fetch(`${API_BASE_URL}/fire-detection/start`, {
         method: 'POST',
         headers: {
@@ -17,6 +18,9 @@ class FireDetectionService {
         },
         body: JSON.stringify({
           camera_id: cameraId,
+          user_id: userId,
+          tenant_id: tenantId,
+          branch_id: branchId,
           sensitivity: settings.sensitivity || 60,
           min_confidence: settings.minConfidence || 70,
           alert_sound: settings.alertSound !== false,
@@ -42,6 +46,7 @@ class FireDetectionService {
    */
   async stopDetection(cameraId) {
     try {
+      console.log('in front end function Stopping detection on camera:', cameraId);
       const response = await fetch(`${API_BASE_URL}/fire-detection/stop/${cameraId}`, {
         method: 'POST',
         headers: {
@@ -49,7 +54,7 @@ class FireDetectionService {
           'Authorization': `Bearer ${this.getToken()}`
         }
       });
-
+      console.log('Stop detection response status:', response.status);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
@@ -62,101 +67,85 @@ class FireDetectionService {
     }
   }
 
-  /**
-   * Get fire alerts with optional filters
-   */
-  async getAlerts(filters = {}) {
-    try {
-      console.log('Fetching fire alerts with filters:', filters);
-      const params = new URLSearchParams();
-      
-      if (filters.camera_id) params.append('camera_id', filters.camera_id);
-      if (filters.status) params.append('status', filters.status);
-      if (filters.from_date) params.append('from_date', filters.from_date);
-      if (filters.to_date) params.append('to_date', filters.to_date);
-      if (filters.limit) params.append('limit', filters.limit);
+  // services/fireDetectionService.js - Update getAlerts method
+async getAlerts(filters = {}) {
+  try {
+    console.log('Fetching fire alerts with filters:', filters);
+    const params = new URLSearchParams();
     
-      const response = await fetch(`${API_BASE_URL}/fire-detection?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${this.getToken()}`
-        }
-      });
-      console.log("Get Alerts Response---",response);
+    if (filters.camera_id) params.append('camera_id', filters.camera_id);
+    if (filters.user_id) params.append('user_id', filters.user_id);
+    if (filters.tenant_id) params.append('tenant_id', filters.tenant_id);
+    if (filters.branch_id) params.append('branch_id', filters.branch_id);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.from_date) params.append('from_date', filters.from_date);
+    if (filters.to_date) params.append('to_date', filters.to_date);
+    if (filters.limit) params.append('limit', filters.limit);
+    if (filters.page) params.append('page', filters.page);
 
-      if (!response.ok) {
-        // Return empty data for 404 instead of throwing
-        if (response.status === 404) {
-          console.warn('Fire detetction endpoint not found (404). This endpoint may not be implemented yet.');
-          return { success: true, data: [] };
-        }
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    const response = await fetch(`${API_BASE_URL}/fire-detection?${params}`, {
+      headers: {
+        'Authorization': `Bearer ${this.getToken()}`
       }
+    });
 
-      return await response.json();
-    } catch (error) {
-      // If it's a network error or endpoint doesn't exist, return empty data
-      if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
-        console.warn('Fire alerts endpoint not accessible:', error.message);
-        return { success: true, data: [] };
-      }
-      console.error('Get alerts error:', error);
-      throw error;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
     }
+
+    const result = await response.json();
+    console.log("Get Alerts Response:", result);
+    return result;
+
+  } catch (error) {
+    console.error('Get alerts error:', error);
+    // Return empty structure for frontend compatibility
+    return { 
+      success: true, 
+      data: [],
+      pagination: {
+        page: 1,
+        total: 0,
+        totalPages: 0
+      }
+    };
   }
+}
 
-  /**
-   * Get statistics for fire detection
-   */
-  async getStats(filters = {}) {
-    try {
-      const params = new URLSearchParams();
-      
-      if (filters.from_date) params.append('from_date', filters.from_date);
-      if (filters.to_date) params.append('to_date', filters.to_date);
+// Update getStats method
+async getStats(filters = {}) {
+  try {
+    const params = new URLSearchParams();
+    
+    if (filters.from_date) params.append('from_date', filters.from_date);
+    if (filters.to_date) params.append('to_date', filters.to_date);
 
-      const response = await fetch(`${API_BASE_URL}/fire-detection/stats?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${this.getToken()}`
-        }
-      });
-
-      if (!response.ok) {
-        // Return default stats for 404
-        if (response.status === 404) {
-          console.warn('Fire detection stats endpoint not found (404).');
-          return {
-            success: true,
-            data: {
-              total_alerts: 0,
-              active_alerts: 0,
-              false_positives: 0,
-              avg_confidence: 0
-            }
-          };
-        }
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    const response = await fetch(`${API_BASE_URL}/fire-detection/stats?${params}`, {
+      headers: {
+        'Authorization': `Bearer ${this.getToken()}`
       }
+    });
 
-      return await response.json();
-    } catch (error) {
-      if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
-        console.warn('Fire detection stats endpoint not accessible.');
-        return {
-          success: true,
-          data: {
-            total_alerts: 0,
-            active_alerts: 0,
-            false_positives: 0,
-            avg_confidence: 0
-          }
-        };
-      }
-      console.error('Get stats error:', error);
-      throw error;
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Get stats error:', error);
+    // Return default stats
+    return {
+      success: true,
+      data: {
+        total_alerts: 0,
+        active_alerts: 0,
+        false_positives: 0,
+        avg_confidence: 0
+      }
+    };
   }
+}
 
   /**
    * Get hourly analytics for charts

@@ -1,10 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Flame, AlertTriangle, Camera, Activity, Bell, Settings, TrendingUp, Clock } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Flame, AlertTriangle, Camera, Activity } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import fireDetectionService from '../services/fireDetectionService';
+import LiveFireDetectionOverlay from './LiveFireDetectionOverlay';
 
+// // Mock service - replace with your actual import
+// const fireDetectionService = {
+//   getCameras_smoke: async () => ({ success: true, data: [] }),
+//   getAlerts: async () => ({ success: true, data: [] }),
+//   getStats: async () => ({ success: true, data: { total_alerts: 0, active_alerts: 0, false_positives: 0, avg_confidence: 0 } }),
+//   getHourlyAnalytics: async () => ({ success: true, data: [] }),
+//   getDetectionStatus: async () => ({ success: true, is_active: false }),
+//   startDetection: async () => ({ success: true }),
+//   stopDetection: async () => ({ success: true }),
+//   resolveAlert: async () => ({ success: true }),
+//   markFalsePositive: async () => ({ success: true })
+// };
 
 export default function FireDetectionPage() {
+  // State
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState(null);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -26,190 +40,179 @@ export default function FireDetectionPage() {
   const [loading, setLoading] = useState(false);
   const [currentAlert, setCurrentAlert] = useState(null);
   const [error, setError] = useState(null);
+
+  // Refs
   const videoRef = useRef(null);
   const audioRef = useRef(null);
   const streamCheckInterval = useRef(null);
+  const lastAlertIdRef = useRef(null);
 
-  // Get user_id from localStorage or auth context
-  const getUserId = () => {
-    // Try to get from localStorage
-    const userId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
-    if (userId) return userId;
+  // User data
+  const userId = localStorage.getItem('userId') || '1';
+  const tenantId = localStorage.getItem('tenantId') || '1';
+  const branchId = localStorage.getItem('branchId') || '1';
 
-    // Try to decode from token
-    const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
-    
-    return null;
-  };
-
-  // Helper function to build stream URL
-  const buildStreamUrl = (camera) => {
+  // Build stream URL
+  const buildStreamUrl = useCallback((camera) => {
     if (!camera) return '';
-
     const camId = camera.camera_id || camera.id;
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+    const apiUrl = 'http://localhost:3000/api';
 
-    console.log('Building stream URL for camera:', camera.stream_url);
-
-    // Priority 1: If camera has RTSP stream_url, use backend proxy to convert to MJPEG
-    if (camera.stream_url && camera.stream_url.startsWith('rtsp://')) {
-      console.log('RTSP stream detected, using backend proxy for camera:', camId);
+    if (camera.stream_url?.startsWith('rtsp://')) {
       return `${apiUrl}/cameras/${camId}/stream/mjpeg`;
     }
-
-    // Priority 2: Use stream_url from database if it's HTTP/MJPEG
-    if (camera.stream_url && (camera.stream_url.startsWith('http://') || camera.stream_url.startsWith('https://'))) {
-      console.log('Using database HTTP stream_url:', camera.stream_url);
+    if (camera.stream_url?.startsWith('http')) {
       return camera.stream_url;
     }
-
-    // Priority 3: Build from camera properties
     if (camera.ip_address) {
-      const cleanIp = camera.ip_address.trim().replace(/\.+/g, '.');
       const port = camera.port || '8080';
-      const protocol = camera.protocol || 'HTTP';
-
-      if (protocol === 'RTSP') {
-        // Use backend proxy for RTSP streams
-        console.log('RTSP protocol detected, using backend proxy for camera:', camId);
-        return `${apiUrl}/cameras/${camId}/stream/mjpeg`;
-      } else if (protocol === 'HTTP') {
-        // Common HTTP/MJPEG endpoints
-        const possiblePaths = [
-          '/video',
-          '/mjpeg',
-          '/video.mjpeg',
-          '/video.cgi',
-          '/axis-cgi/mjpg/video.cgi'
-        ];
-        return `http://${cleanIp}:${port}${possiblePaths[0]}`;
-      }
+      return `http://${camera.ip_address}:${port}/video`;
     }
+    return `${apiUrl}/cameras/${camId}/stream/mjpeg`;
+  }, []);
 
-    // Priority 4: Use backend proxy as fallback
-    if (camId) {
-      console.log('Using backend proxy fallback for camera:', camId);
-      return `${apiUrl}/cameras/${camId}/stream/mjpeg`;
+  // Play alert sound
+  const playAlertSound = useCallback(() => {
+    if (!settings.alertSound) return;
+    
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(e => {
+        console.error('Audio play failed:', e);
+        // Fallback to Web Audio API
+        try {
+          const context = new (window.AudioContext || window.webkitAudioContext)();
+          const oscillator = context.createOscillator();
+          const gainNode = context.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(context.destination);
+          
+          oscillator.frequency.value = 800;
+          oscillator.type = 'sine';
+          gainNode.gain.setValueAtTime(0.3, context.currentTime);
+          
+          oscillator.start(context.currentTime);
+          oscillator.stop(context.currentTime + 1);
+        } catch (err) {
+          console.error('Fallback audio failed:', err);
+        }
+      });
     }
+  }, [settings.alertSound]);
 
-    return '';
-  };
+  // Stop alert sound
+  const stopAlertSound = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  }, []);
 
-  // Load cameras for the logged-in user
-  const loadCameras = async () => {
+  // Load cameras
+  const loadCameras = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-
-      const userId = getUserId();
-      console.log('Loading cameras for user Id:', userId);
 
       if (!userId) {
         throw new Error('User ID not found. Please log in again.');
       }
 
-      // Fetch cameras filtered by user_id
       const response = await fireDetectionService.getCameras_smoke({
         user_id: userId,
         is_active: true
       });
 
-      console.log('Cameras API response:', response);
-
       let camerasData = [];
-      
-      // Handle different response structures
       if (response?.success && response?.data) {
-        if (Array.isArray(response.data.cameras)) {
-          camerasData = response.data.cameras;
-        } else if (Array.isArray(response.data)) {
-          camerasData = response.data;
-        }
-      } else if (Array.isArray(response?.data?.cameras)) {
-        camerasData = response.data.cameras;
-      } else if (Array.isArray(response)) {
-        camerasData = response;
+        camerasData = Array.isArray(response.data.cameras) ? response.data.cameras : 
+                      Array.isArray(response.data) ? response.data : [];
       }
 
-      console.log('Processed cameras data:', camerasData);
-
-      if (!camerasData || camerasData.length === 0) {
-        setError('No cameras assigned to your account. Please contact your administrator.');
+      if (!camerasData.length) {
+        setError('No cameras assigned to your account.');
         setCameras([]);
         return;
       }
 
       setCameras(camerasData);
 
-      // Auto-select first camera
-      if (camerasData.length > 0) {
+      if (camerasData.length > 0 && !selectedCamera) {
         const firstCamera = camerasData[0];
         setSelectedCamera(firstCamera);
-        
-        const displayUrl = buildStreamUrl(firstCamera);
-        console.log('Initial stream URL:', displayUrl);
-        setStreamUrl(displayUrl);
-        
-        // Check if detection is already active
+        setStreamUrl(buildStreamUrl(firstCamera));
         checkDetectionStatus(firstCamera.camera_id || firstCamera.id);
       }
-
     } catch (error) {
       console.error('Failed to load cameras:', error);
-      setError(error.message || 'Failed to load cameras. Please try again.');
-      
-      // Don't use fallback data - show the actual error to the user
+      setError(error.message || 'Failed to load cameras.');
       setCameras([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, selectedCamera, buildStreamUrl]);
 
   // Load alerts
-  const loadAlerts = async () => {
+  const loadAlerts = useCallback(async () => {
+    if (!selectedCamera) return;
+
     try {
-      console.log('Loading alerts for selected camera:', selectedCamera);
-      const cameraId = selectedCamera?.camera_id || selectedCamera?.id;
-      console.log('Loading alerts for camera:', cameraId);
+      const cameraId = selectedCamera.camera_id || selectedCamera.id;
+      
       const response = await fireDetectionService.getAlerts({
         limit: 10,
-        camera_id: cameraId
+        camera_id: cameraId,
+        user_id: userId,
+        tenant_id: tenantId,
+        branch_id: branchId,
+        status: 'active'
       });
 
       if (response.success && Array.isArray(response.data)) {
         const alerts = response.data.map(alert => ({
-          id: alert.id || alert.alert_id,
-          camera: alert.camera_name || selectedCamera?.camera_name || 'Unknown Camera',
-          timestamp: alert.timestamp || alert.created_at,
-          confidence: alert.confidence || 0,
-          status: alert.status || 'pending',
-          resolved: alert.status === 'resolved' || alert.status === 'false_positive'
+          id: alert.firealert_id || alert.id,
+          camera_id: alert.camera_id,
+          camera_name: alert.camera?.camera_name || selectedCamera.camera_name || 'Unknown',
+          timestamp: alert.alert_timestamp || alert.timestamp,
+          confidence: parseFloat(alert.confidence) || 0,
+          status: alert.status || 'active',
+          resolved: alert.status === 'resolved' || alert.status === 'false_positive',
+          bounding_boxes: alert.bounding_boxes || [],
+          snapshot_path: alert.snapshot_path
         }));
 
         setRecentAlerts(alerts);
 
-        // Update current alert if there's an active one
-        const activeAlert = alerts.find(a => !a.resolved);
+        // Handle active alert
+        const activeAlert = alerts.find(a => a.status === 'active');
+        
         if (activeAlert && isDetecting) {
-          setCurrentAlert(activeAlert);
-          if (settings.alertSound && currentAlert?.id !== activeAlert.id) {
+          const isNewAlert = lastAlertIdRef.current !== activeAlert.id;
+          
+          if (isNewAlert) {
+            console.log('🔊 New fire alert detected! Playing alarm...');
+            setCurrentAlert(activeAlert);
+            lastAlertIdRef.current = activeAlert.id;
             playAlertSound();
           }
         } else if (!activeAlert) {
+          if (currentAlert) {
+            stopAlertSound();
+          }
           setCurrentAlert(null);
+          lastAlertIdRef.current = null;
         }
       }
     } catch (error) {
       console.error('Failed to load alerts:', error);
-      // Don't show error for alerts as it's not critical
     }
-  };
+  }, [selectedCamera, userId, tenantId, branchId, isDetecting, currentAlert, playAlertSound, stopAlertSound]);
 
   // Load statistics
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       const response = await fireDetectionService.getStats();
-
       if (response.success && response.data) {
         setDetectionStats({
           totalAlerts: response.data.total_alerts || 0,
@@ -221,30 +224,28 @@ export default function FireDetectionPage() {
     } catch (error) {
       console.error('Failed to load stats:', error);
     }
-  };
+  }, []);
 
   // Load chart data
-  const loadChartData = async () => {
+  const loadChartData = useCallback(async () => {
     try {
       const response = await fireDetectionService.getHourlyAnalytics();
-
+      
       if (response.success && Array.isArray(response.data)) {
         const formattedData = response.data.map(item => ({
           time: item.hour || item.time,
           alerts: item.alerts || 0,
           falseAlerts: item.false_alerts || 0
         }));
-
         setChartData(formattedData);
       } else {
-        // Generate mock data as fallback
         generateMockChartData();
       }
     } catch (error) {
       console.error('Failed to load chart data:', error);
       generateMockChartData();
     }
-  };
+  }, []);
 
   // Generate mock chart data
   const generateMockChartData = () => {
@@ -261,19 +262,17 @@ export default function FireDetectionPage() {
   };
 
   // Check detection status
-  const checkDetectionStatus = async (cameraId) => {
+  const checkDetectionStatus = useCallback(async (cameraId) => {
     if (!cameraId) return;
-
     try {
       const response = await fireDetectionService.getDetectionStatus(cameraId);
-
       if (response.success) {
         setIsDetecting(response.is_active || false);
       }
     } catch (error) {
       console.error('Failed to check detection status:', error);
     }
-  };
+  }, []);
 
   // Start detection
   const startDetection = async () => {
@@ -287,24 +286,17 @@ export default function FireDetectionPage() {
 
     try {
       const cameraId = selectedCamera.camera_id || selectedCamera.id;
-      
       const response = await fireDetectionService.startDetection(
         cameraId,
+        userId,
+        tenantId,
+        branchId,
         settings
       );
-
+      
       if (response.success) {
         setIsDetecting(true);
-        console.log('Fire detection started for camera:', selectedCamera.camera_name);
-        
-        // Start periodic checks
-        if (streamCheckInterval.current) {
-          clearInterval(streamCheckInterval.current);
-        }
-        streamCheckInterval.current = setInterval(() => {
-          loadAlerts();
-          loadStats();
-        }, 5000);
+        console.log('Fire detection started');
       } else {
         throw new Error(response.message || 'Failed to start detection');
       }
@@ -326,25 +318,26 @@ export default function FireDetectionPage() {
 
     try {
       const cameraId = selectedCamera.camera_id || selectedCamera.id;
-      
       const response = await fireDetectionService.stopDetection(cameraId);
-
+      
       if (response.success) {
         setIsDetecting(false);
         setCurrentAlert(null);
+        lastAlertIdRef.current = null;
+        stopAlertSound();
         console.log('Fire detection stopped');
-        
-        // Clear interval
-        if (streamCheckInterval.current) {
-          clearInterval(streamCheckInterval.current);
-          streamCheckInterval.current = null;
-        }
-      } else {
-        throw new Error(response.message || 'Failed to stop detection');
       }
     } catch (error) {
       console.error('Failed to stop detection:', error);
-      setError('Failed to stop detection: ' + error.message);
+      
+      if (error.message.includes('No active detection')) {
+        setIsDetecting(false);
+        setCurrentAlert(null);
+        lastAlertIdRef.current = null;
+        stopAlertSound();
+      } else {
+        setError('Failed to stop detection: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -364,6 +357,8 @@ export default function FireDetectionPage() {
 
         if (currentAlert?.id === alertId) {
           setCurrentAlert(null);
+          lastAlertIdRef.current = null;
+          stopAlertSound();
         }
 
         loadStats();
@@ -388,6 +383,8 @@ export default function FireDetectionPage() {
 
         if (currentAlert?.id === alertId) {
           setCurrentAlert(null);
+          lastAlertIdRef.current = null;
+          stopAlertSound();
         }
 
         loadStats();
@@ -398,26 +395,14 @@ export default function FireDetectionPage() {
     }
   };
 
-  // Play alert sound
-  const playAlertSound = () => {
-    if (audioRef.current) {
-      audioRef.current.play().catch(e => console.error('Audio play failed:', e));
-    }
-  };
-
   // Handle camera selection
   const handleCameraSelect = (camera) => {
     setSelectedCamera(camera);
+    setStreamUrl(buildStreamUrl(camera));
     
-    const displayUrl = buildStreamUrl(camera);
-    console.log('Selected camera stream URL:', displayUrl);
-    setStreamUrl(displayUrl);
-    
-    // Check detection status for new camera
     const cameraId = camera.camera_id || camera.id;
     checkDetectionStatus(cameraId);
     
-    // Stop current detection if running
     if (isDetecting) {
       stopDetection();
     }
@@ -426,7 +411,6 @@ export default function FireDetectionPage() {
   // Initial load
   useEffect(() => {
     loadCameras();
-   // loadAlerts();
     loadStats();
     loadChartData();
 
@@ -434,21 +418,24 @@ export default function FireDetectionPage() {
       if (streamCheckInterval.current) {
         clearInterval(streamCheckInterval.current);
       }
+      stopAlertSound();
     };
   }, []);
 
-  
-
-  // Refresh data when detecting
+  // Polling when detecting
   useEffect(() => {
-    if (isDetecting && !streamCheckInterval.current) {
+    if (isDetecting) {
+      loadAlerts();
+      
       streamCheckInterval.current = setInterval(() => {
         loadAlerts();
         loadStats();
       }, 5000);
-    } else if (!isDetecting && streamCheckInterval.current) {
-      clearInterval(streamCheckInterval.current);
-      streamCheckInterval.current = null;
+    } else {
+      if (streamCheckInterval.current) {
+        clearInterval(streamCheckInterval.current);
+        streamCheckInterval.current = null;
+      }
     }
 
     return () => {
@@ -456,14 +443,7 @@ export default function FireDetectionPage() {
         clearInterval(streamCheckInterval.current);
       }
     };
-  }, [isDetecting]);
-
-   // Load alerts when selectedCamera changes
-  useEffect(() => {
-    if (selectedCamera) {
-      loadAlerts();
-    }
-  }, [selectedCamera]);
+  }, [isDetecting, loadAlerts, loadStats]);
 
   // Stat Card Component
   const StatCard = ({ icon: Icon, title, value, color, subtitle }) => (
@@ -472,9 +452,7 @@ export default function FireDetectionPage() {
         <div className="flex-1">
           <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
           <p className="text-3xl font-bold text-gray-900">{value}</p>
-          {subtitle && (
-            <p className="text-sm text-gray-500 mt-2">{subtitle}</p>
-          )}
+          {subtitle && <p className="text-sm text-gray-500 mt-2">{subtitle}</p>}
         </div>
         <div className={`w-12 h-12 rounded-full flex items-center justify-center ${color}`}>
           <Icon className="w-6 h-6 text-white" />
@@ -493,7 +471,7 @@ export default function FireDetectionPage() {
               <Flame className="w-6 h-6 text-red-600" />
               Fire Detection System
             </h1>
-            <p className="text-sm text-gray-600">Real-time fire detection and monitoring</p>
+            <p className="text-sm text-gray-600">Real-time monitoring</p>
           </div>
           <div className="flex items-center gap-3">
             <span className={`inline-flex items-center gap-2 text-sm ${isDetecting ? 'text-green-600' : 'text-gray-600'}`}>
@@ -526,15 +504,15 @@ export default function FireDetectionPage() {
 
       {/* Active Alert Banner */}
       {currentAlert && !currentAlert.resolved && (
-        <div className="bg-red-600 text-white">
+        <div className="bg-red-600 text-white animate-pulse">
           <div className="mx-auto max-w-7xl px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <AlertTriangle className="w-6 h-6 animate-pulse" />
+                <AlertTriangle className="w-6 h-6 animate-bounce" />
                 <div>
-                  <p className="font-semibold">FIRE DETECTED!</p>
+                  <p className="font-semibold">🔥 FIRE DETECTED!</p>
                   <p className="text-sm opacity-90">
-                    {currentAlert.camera} • Confidence: {(currentAlert.confidence * 100).toFixed(0)}% • {new Date(currentAlert.timestamp).toLocaleTimeString()}
+                    {currentAlert.camera_name} • {(currentAlert.confidence * 100).toFixed(0)}% • {new Date(currentAlert.timestamp).toLocaleTimeString()}
                   </p>
                 </div>
               </div>
@@ -558,7 +536,6 @@ export default function FireDetectionPage() {
       )}
 
       <main className="mx-auto max-w-7xl px-4 py-6">
-        {/* Loading State */}
         {loading && cameras.length === 0 && (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
@@ -568,60 +545,29 @@ export default function FireDetectionPage() {
           </div>
         )}
 
-        {/* No Cameras State */}
         {!loading && cameras.length === 0 && (
           <div className="bg-white rounded-lg shadow-md p-12 text-center">
             <Camera className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">No Cameras Available</h2>
-            <p className="text-gray-600">
-              {error || 'No cameras are assigned to your account. Please contact your administrator.'}
-            </p>
+            <p className="text-gray-600">{error || 'No cameras assigned to your account.'}</p>
           </div>
         )}
 
-        {/* Main Content */}
         {cameras.length > 0 && (
           <>
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-              <StatCard
-                icon={AlertTriangle}
-                title="Total Alerts"
-                value={detectionStats.totalAlerts}
-                color="bg-red-600"
-                subtitle="All time"
-              />
-              <StatCard
-                icon={Flame}
-                title="Active Alerts"
-                value={detectionStats.activeAlerts}
-                color="bg-orange-600"
-                subtitle="Requires attention"
-              />
-              <StatCard
-                icon={Activity}
-                title="Avg Confidence"
-                value={`${detectionStats.avgConfidence.toFixed(0)}%`}
-                color="bg-blue-600"
-                subtitle="Detection accuracy"
-              />
-              <StatCard
-                icon={Camera}
-                title="Your Cameras"
-                value={cameras.length}
-                color="bg-green-600"
-                subtitle={`${cameras.filter(c => c.is_active).length} active`}
-              />
+              <StatCard icon={AlertTriangle} title="Total Alerts" value={detectionStats.totalAlerts} color="bg-red-600" subtitle="All time" />
+              <StatCard icon={Flame} title="Active Alerts" value={detectionStats.activeAlerts} color="bg-orange-600" subtitle="Requires attention" />
+              <StatCard icon={Activity} title="Avg Confidence" value={`${detectionStats.avgConfidence.toFixed(0)}%`} color="bg-blue-600" subtitle="Detection accuracy" />
+              <StatCard icon={Camera} title="Your Cameras" value={cameras.length} color="bg-green-600" subtitle={`${cameras.filter(c => c.is_active).length} active`} />
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              {/* Left Column - Camera Selection & Controls */}
+              {/* Left Column */}
               <section className="lg:col-span-1 space-y-6">
-                {/* Camera Selection */}
                 <div className="rounded-2xl border bg-white p-4 shadow-sm">
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700 mb-3">
-                    Select Camera
-                  </h2>
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700 mb-3">Select Camera</h2>
                   <div className="space-y-2">
                     {cameras.map((camera) => {
                       const cameraId = camera.camera_id || camera.id;
@@ -631,22 +577,14 @@ export default function FireDetectionPage() {
                         <button
                           key={cameraId}
                           onClick={() => handleCameraSelect(camera)}
-                          className={`w-full text-left p-3 rounded-lg border transition ${
-                            isSelected
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 hover:bg-gray-50'
-                          }`}
+                          className={`w-full text-left p-3 rounded-lg border transition ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
                         >
                           <div className="flex items-center justify-between">
                             <div>
                               <div className="font-medium text-sm">{camera.camera_name || camera.name}</div>
-                              <div className="text-xs text-gray-500">
-                                {camera.ip_address || 'No IP'}:{camera.port || '8080'}
-                              </div>
+                              <div className="text-xs text-gray-500">{camera.ip_address || 'No IP'}:{camera.port || '8080'}</div>
                             </div>
-                            <span className={`inline-block h-2 w-2 rounded-full ${
-                              camera.is_active ? 'bg-green-500' : 'bg-gray-300'
-                            }`} />
+                            <span className={`inline-block h-2 w-2 rounded-full ${camera.is_active ? 'bg-green-500' : 'bg-gray-300'}`} />
                           </div>
                         </button>
                       );
@@ -654,12 +592,8 @@ export default function FireDetectionPage() {
                   </div>
                 </div>
 
-                {/* Detection Controls */}
                 <div className="rounded-2xl border bg-white p-4 shadow-sm">
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700 mb-3">
-                    Detection Controls
-                  </h2>
-
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700 mb-3">Controls</h2>
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm text-gray-600 flex items-center justify-between mb-2">
@@ -677,57 +611,23 @@ export default function FireDetectionPage() {
                       />
                     </div>
 
-                    <div>
-                      <label className="text-sm text-gray-600 flex items-center justify-between mb-2">
-                        <span>Min Confidence</span>
-                        <span className="font-medium">{settings.minConfidence}%</span>
-                      </label>
-                      <input
-                        type="range"
-                        min="50"
-                        max="100"
-                        value={settings.minConfidence}
-                        onChange={(e) => setSettings({ ...settings, minConfidence: parseInt(e.target.value) })}
-                        className="w-full"
-                        disabled={isDetecting}
-                      />
-                    </div>
-
                     <div className="flex items-center justify-between py-2 border-t">
-                      <span className="text-sm text-gray-600">Alert Sound</span>
+                      <span className="text-sm text-gray-600">🔊 Alert Sound</span>
                       <button
                         onClick={() => setSettings({ ...settings, alertSound: !settings.alertSound })}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                          settings.alertSound ? 'bg-blue-600' : 'bg-gray-300'
-                        }`}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${settings.alertSound ? 'bg-blue-600' : 'bg-gray-300'}`}
                       >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
-                          settings.alertSound ? 'translate-x-6' : 'translate-x-1'
-                        }`} />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between py-2">
-                      <span className="text-sm text-gray-600">Email Alerts</span>
-                      <button
-                        onClick={() => setSettings({ ...settings, emailAlert: !settings.emailAlert })}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                          settings.emailAlert ? 'bg-blue-600' : 'bg-gray-300'
-                        }`}
-                      >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
-                          settings.emailAlert ? 'translate-x-6' : 'translate-x-1'
-                        }`} />
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${settings.alertSound ? 'translate-x-6' : 'translate-x-1'}`} />
                       </button>
                     </div>
                   </div>
 
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-4">
                     {!isDetecting ? (
                       <button
                         onClick={startDetection}
                         disabled={loading || !selectedCamera}
-                        className="flex-1 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="w-full rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-60"
                       >
                         {loading ? 'Starting...' : 'Start Detection'}
                       </button>
@@ -735,7 +635,7 @@ export default function FireDetectionPage() {
                       <button
                         onClick={stopDetection}
                         disabled={loading}
-                        className="flex-1 rounded-lg bg-red-600 px-4 py-3 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-60"
+                        className="w-full rounded-lg bg-red-600 px-4 py-3 text-sm font-medium text-white hover:bg-red-500"
                       >
                         {loading ? 'Stopping...' : 'Stop Detection'}
                       </button>
@@ -743,59 +643,30 @@ export default function FireDetectionPage() {
                   </div>
                 </div>
 
-                {/* Recent Alerts List */}
                 <div className="rounded-2xl border bg-white p-4 shadow-sm">
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700 mb-3">
-                    Recent Alerts
-                  </h2>
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700 mb-3">Recent Alerts</h2>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {recentAlerts.length === 0 ? (
                       <p className="text-sm text-gray-500 text-center py-4">No alerts yet</p>
                     ) : (
                       recentAlerts.map((alert) => (
-                        <div
-                          key={alert.id}
-                          className={`p-3 rounded-lg border ${
-                            alert.resolved ? 'bg-gray-50 border-gray-200' : 'bg-red-50 border-red-200'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between mb-2">
+                        <div key={alert.id} className={`p-3 rounded-lg border ${alert.resolved ? 'bg-gray-50 border-gray-200' : 'bg-red-50 border-red-200'}`}>
+                          <div className="flex items-start justify-between">
                             <div className="flex-1">
-                              <p className="text-sm font-medium">{alert.camera}</p>
-                              <p className="text-xs text-gray-600">
-                                {new Date(alert.timestamp).toLocaleString()}
-                              </p>
+                              <p className="text-sm font-medium">{alert.camera_name}</p>
+                              <p className="text-xs text-gray-600">{new Date(alert.timestamp).toLocaleString()}</p>
                             </div>
-                            <span className={`text-xs px-2 py-1 rounded ${
-                              alert.status === 'confirmed' ? 'bg-red-100 text-red-700' :
-                              alert.status === 'false_positive' ? 'bg-gray-100 text-gray-700' :
-                              alert.status === 'resolved' ? 'bg-green-100 text-green-700' :
-                              'bg-orange-100 text-orange-700'
-                            }`}>
+                            <span className={`text-xs px-2 py-1 rounded ${alert.status === 'active' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
                               {alert.status}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-600">
-                              Confidence: {(alert.confidence * 100).toFixed(0)}%
-                            </span>
-                            {!alert.resolved && (
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => resolveAlert(alert.id)}
-                                  className="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
-                                >
-                                  Resolve
-                                </button>
-                                <button
-                                  onClick={() => markFalsePositive(alert.id)}
-                                  className="text-xs px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
-                                >
-                                  False
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                             <div className="relative aspect-video w-full bg-black">
+                  <LiveFireDetectionOverlay
+                    streamUrl={streamUrl}
+                    cameraId={selectedCamera?.camera_id || selectedCamera?.id}
+                    isDetecting={isDetecting}
+                  />
+                </div>
                         </div>
                       ))
                     )}
@@ -803,19 +674,11 @@ export default function FireDetectionPage() {
                 </div>
               </section>
 
-              {/* Right Column - Live View & Analytics */}
+              {/* Right Column */}
               <section className="lg:col-span-2 space-y-6">
-                {/* Live Camera Feed */}
                 <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
                   <div className="flex items-center justify-between border-b px-4 py-2 bg-gray-50">
-                    <div>
-                      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
-                        Live Camera Feed
-                      </h2>
-                      <p className="text-xs text-gray-500">
-                        {selectedCamera ? selectedCamera.camera_name || selectedCamera.name : 'No camera selected'}
-                      </p>
-                    </div>
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">Live Feed</h2>
                     {isDetecting && (
                       <span className="flex items-center gap-2 text-xs text-green-600">
                         <Activity className="w-4 h-4 animate-pulse" />
@@ -823,64 +686,30 @@ export default function FireDetectionPage() {
                       </span>
                     )}
                   </div>
-
                   <div className="relative aspect-video w-full bg-black">
                     {streamUrl && selectedCamera ? (
-                      <img
-                        ref={videoRef}
-                        src={streamUrl}
-                        alt="Live camera stream"
-                        className="h-full w-full object-contain"
-                        draggable={false}
-                        onError={(e) => {
-                          console.error('Failed to load camera stream from:', streamUrl);
-                          setError('Failed to load camera stream. Check camera connection and URL.');
-                        }}
-                        onLoad={() => {
-                          console.log('Stream loaded successfully');
-                          setError(null);
-                        }}
-                      />
+                      <img ref={videoRef} src={streamUrl} alt="Live stream" className="h-full w-full object-contain" />
                     ) : (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center text-gray-400">
-                          <Camera className="w-12 h-12 mx-auto mb-3" />
-                          <p className="text-sm">Select a camera to start</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Detection Overlay */}
-                    {isDetecting && currentAlert && (
-                      <div className="absolute top-4 left-4 right-4">
-                        <div className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 animate-pulse">
-                          <Flame className="w-5 h-5" />
-                          <span className="font-semibold">FIRE DETECTED - {(currentAlert.confidence * 100).toFixed(0)}%</span>
-                        </div>
+                      <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                        <Camera className="w-12 h-12" />
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Analytics Charts */}
                 {chartData.length > 0 && (
-                  <div className="grid grid-cols-1 gap-6">
-                    <div className="rounded-2xl border bg-white p-4 shadow-sm">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-700 mb-4">
-                        24-Hour Alert History
-                      </h3>
-                      <ResponsiveContainer width="100%" height={250}>
-                        <LineChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="time" tick={{ fontSize: 12 }} />
-                          <YAxis tick={{ fontSize: 12 }} />
-                          <Tooltip />
-                          <Legend />
-                          <Line type="monotone" dataKey="alerts" stroke="#ef4444" strokeWidth={2} name="Fire Alerts" />
-                          <Line type="monotone" dataKey="falseAlerts" stroke="#f59e0b" strokeWidth={2} name="False Positives" />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+                  <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-700 mb-4">24-Hour History</h3>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="time" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="alerts" stroke="#ef4444" strokeWidth={2} name="Alerts" />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 )}
               </section>
@@ -889,8 +718,14 @@ export default function FireDetectionPage() {
         )}
       </main>
 
-      {/* Hidden audio element for alert sound */}
-      <audio ref={audioRef} src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTcIGWi77OeFTQ" preload="auto" />
+      {/* Audio Element */}
+      <audio 
+        ref={audioRef}
+        loop
+        preload="auto"
+      >
+        <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=" type="audio/wav" />
+      </audio>
     </div>
   );
 }
