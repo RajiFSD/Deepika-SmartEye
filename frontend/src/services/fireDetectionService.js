@@ -391,7 +391,7 @@ async getStats(filters = {}) {
     if (rest.connection_status) params.append('connection_status', rest.connection_status);
     if (rest.tenant_id) params.append('tenant_id', rest.tenant_id);
 
-    console.log("need to write whole api ",API_BASE_URL,user_id,params.toString());
+    //console.log("need to write whole api ",API_BASE_URL,user_id,params.toString());
 
     const response = await fetch(`${API_BASE_URL}/cameras/user/${user_id}?${params}`, {
       method: 'GET',
@@ -414,7 +414,6 @@ async getStats(filters = {}) {
   }
 }
 
-
   /**
    * Get authentication token
    */
@@ -422,9 +421,6 @@ async getStats(filters = {}) {
     // Adjust based on your auth implementation
     return localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
   }
-
-
-  
 
   /**
    * Build image URL

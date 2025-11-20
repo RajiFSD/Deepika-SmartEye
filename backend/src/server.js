@@ -67,7 +67,11 @@ class Server {
     
     // Security middleware
     this.app.use(helmet({
-      crossOriginResourcePolicy: { policy: "cross-origin" }
+
+        crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+  crossOriginEmbedderPolicy: false, // Disable for MJPEG streams
+  contentSecurityPolicy: false // Disable for MJPEG streams
     }));
     
     // Logging

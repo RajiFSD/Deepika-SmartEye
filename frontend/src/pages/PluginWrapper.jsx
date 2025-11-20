@@ -58,11 +58,11 @@ function PluginWrapper({ setIsAuthenticated }) {
       ]
     },
     {
-      id: 'smokeAlert',
+      id: 'fireAlert',
       icon: Flame,
-      label: 'Smoke Alert',
+      label: 'Fire Alert',
       items: [
-        { path: '/smoke-detection', icon: Flame, label: 'Smoke Detection' },
+        { path: '/smoke-detection', icon: Flame, label: 'Fire Detection' },
         { path: '/smoke-alerts', icon: Bell, label: 'Alert History' },
         { path: '/smoke-analytics', icon: Activity, label: 'Analytics' }
       ]

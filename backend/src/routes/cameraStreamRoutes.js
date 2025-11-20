@@ -215,77 +215,77 @@ router.post('/stream', async (req, res) => {
  * GET /api/camera/video/:streamId
  * Get video stream feed (MJPEG)
  */
-router.get('/video/:streamId', (req, res) => {
-  const { streamId } = req.params;
+// router.get('/video/:streamId', (req, res) => {
+//   const { streamId } = req.params;
 
-  console.log(`📹 Client requesting video stream: ${streamId}`);
+//   console.log(`📹 Client requesting video stream: ${streamId}`);
 
-  if (!cameraConnectionService.isStreaming(streamId)) {
-    console.error(`❌ Stream not found or not active: ${streamId}`);
-    return res.status(404).json({
-      success: false,
-      message: 'Stream not found or not active. Please start the stream first.'
-    });
-  }
+//   if (!cameraConnectionService.isStreaming(streamId)) {
+//     console.error(`❌ Stream not found or not active: ${streamId}`);
+//     return res.status(404).json({
+//       success: false,
+//       message: 'Stream not found or not active. Please start the stream first.'
+//     });
+//   }
 
-  const streamInfo = cameraConnectionService.getStreamInfo(streamId);
-  console.log(`✅ Stream info:`, streamInfo);
+//   const streamInfo = cameraConnectionService.getStreamInfo(streamId);
+//   console.log(`✅ Stream info:`, streamInfo);
 
-  // Set headers for MJPEG stream
-  res.writeHead(200, {
-    'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
-    'Connection': 'keep-alive',
-    'Pragma': 'no-cache',
-    'Expires': '0',
-    'Access-Control-Allow-Origin': '*'
-  });
+//   // Set headers for MJPEG stream
+//   res.writeHead(200, {
+//     'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+//     'Cache-Control': 'no-cache, no-store, must-revalidate',
+//     'Connection': 'keep-alive',
+//     'Pragma': 'no-cache',
+//     'Expires': '0',
+//     'Access-Control-Allow-Origin': '*'
+//   });
 
-  // Initialize frame storage
-  global.cameraFrames = global.cameraFrames || new Map();
+//   // Initialize frame storage
+//   global.cameraFrames = global.cameraFrames || new Map();
 
-  let frameCount = 0;
+//   let frameCount = 0;
 
-  // Send frames to client
-  const intervalId = setInterval(() => {
-    const frameData = global.cameraFrames.get(streamId);
+//   // Send frames to client
+//   const intervalId = setInterval(() => {
+//     const frameData = global.cameraFrames.get(streamId);
     
-    if (frameData && frameData.length > 0) {
-      try {
-        res.write('--frame\r\n');
-        res.write('Content-Type: image/jpeg\r\n');
-        res.write(`Content-Length: ${frameData.length}\r\n\r\n`);
-        res.write(frameData);
-        res.write('\r\n');
+//     if (frameData && frameData.length > 0) {
+//       try {
+//         res.write('--frame\r\n');
+//         res.write('Content-Type: image/jpeg\r\n');
+//         res.write(`Content-Length: ${frameData.length}\r\n\r\n`);
+//         res.write(frameData);
+//         res.write('\r\n');
         
-        frameCount++;
-        if (frameCount % 30 === 0) {
-          console.log(`📊 Sent ${frameCount} frames to client for ${streamId}`);
-        }
-      } catch (error) {
-        console.error('❌ Error writing frame:', error);
-        clearInterval(intervalId);
-        res.end();
-      }
-    } else {
-      // No frame available yet
-      if (frameCount === 0) {
-        console.log(`⏳ Waiting for first frame for ${streamId}...`);
-      }
-    }
-  }, 100); // 10 FPS for viewing
+//         frameCount++;
+//         if (frameCount % 30 === 0) {
+//           console.log(`📊 Sent ${frameCount} frames to client for ${streamId}`);
+//         }
+//       } catch (error) {
+//         console.error('❌ Error writing frame:', error);
+//         clearInterval(intervalId);
+//         res.end();
+//       }
+//     } else {
+//       // No frame available yet
+//       if (frameCount === 0) {
+//         console.log(`⏳ Waiting for first frame for ${streamId}...`);
+//       }
+//     }
+//   }, 100); // 10 FPS for viewing
 
-  // Clean up on disconnect
-  req.on('close', () => {
-    clearInterval(intervalId);
-    console.log(`🔌 Client disconnected from stream: ${streamId} (sent ${frameCount} frames)`);
-  });
+//   // Clean up on disconnect
+//   req.on('close', () => {
+//     clearInterval(intervalId);
+//     console.log(`🔌 Client disconnected from stream: ${streamId} (sent ${frameCount} frames)`);
+//   });
 
-  req.on('error', (error) => {
-    clearInterval(intervalId);
-    console.error(`❌ Client connection error for ${streamId}:`, error);
-  });
-});
+//   req.on('error', (error) => {
+//     clearInterval(intervalId);
+//     console.error(`❌ Client connection error for ${streamId}:`, error);
+//   });
+// });
 
 /**
  * POST /api/camera/stop/:streamId
@@ -404,6 +404,56 @@ router.get('/active', async (req, res) => {
     });
   }
 });
+
+
+router.get('/video/:streamId', (req, res) => {
+  const { streamId } = req.params;
+  console.log(`📹 Client requesting video stream: ${streamId}`);
+
+  if (!cameraConnectionService.isStreaming(streamId)) {
+    return res.status(404).json({
+      success: false,
+      message: 'Stream not active. Start the stream first.'
+    });
+  }
+
+  // ⭐ CORS + CORP fixes (prevents canvas taint)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
+  res.writeHead(200, {
+    'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+    'Connection': 'keep-alive'
+  });
+
+  const intervalId = setInterval(() => {
+    const frame = cameraConnectionService.getLatestFrame(streamId);
+    if (!frame) return;
+
+    try {
+      res.write('--frame\r\n');
+      res.write('Content-Type: image/jpeg\r\n');
+      res.write(`Content-Length: ${frame.length}\r\n\r\n`);
+      res.write(frame);
+      res.write('\r\n');
+    } catch (err) {
+      console.log('Error writing frame:', err);
+      clearInterval(intervalId);
+      try { res.end(); } catch (_) {}
+    }
+  }, 100);
+
+  req.on('close', () => {
+    clearInterval(intervalId);
+    console.log(`🔌 Client disconnected from stream: ${streamId}`);
+  });
+});
+
+
+
 
 /**
  * GET /api/test-ffmpeg

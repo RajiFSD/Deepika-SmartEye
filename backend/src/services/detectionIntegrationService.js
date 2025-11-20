@@ -18,6 +18,7 @@ class DetectionIntegrationService {
    */
   async processVideoWithGenderDetection(filePath, options = {}) {
     try {
+      console.log('🚀 Sendin g processVideoWithGenderDetection ');
       const { camera_id, tenant_id, branch_id, job_id } = options;
 
       console.log(`🎬 Processing video with gender detection: ${filePath}`);

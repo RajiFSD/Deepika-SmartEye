@@ -1160,6 +1160,12 @@ class CameraConnectionService {
     }
   }
 
+
+  getLatestFrame(streamId) {
+  const sd = this.activeStreams?.get(streamId);
+  return sd ? sd.latestFrame : null;
+}
+
   // ============================================
   // UTILITY METHODS
   // ============================================

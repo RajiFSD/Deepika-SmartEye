@@ -4,18 +4,6 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import fireDetectionService from '../services/fireDetectionService';
 import LiveFireDetectionOverlay from './LiveFireDetectionOverlay';
 
-// // Mock service - replace with your actual import
-// const fireDetectionService = {
-//   getCameras_smoke: async () => ({ success: true, data: [] }),
-//   getAlerts: async () => ({ success: true, data: [] }),
-//   getStats: async () => ({ success: true, data: { total_alerts: 0, active_alerts: 0, false_positives: 0, avg_confidence: 0 } }),
-//   getHourlyAnalytics: async () => ({ success: true, data: [] }),
-//   getDetectionStatus: async () => ({ success: true, is_active: false }),
-//   startDetection: async () => ({ success: true }),
-//   stopDetection: async () => ({ success: true }),
-//   resolveAlert: async () => ({ success: true }),
-//   markFalsePositive: async () => ({ success: true })
-// };
 
 export default function FireDetectionPage() {
   // State
