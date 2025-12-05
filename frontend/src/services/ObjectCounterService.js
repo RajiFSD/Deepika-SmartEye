@@ -1,16 +1,8 @@
 import api from './api';
 
-// Don't include /api here since it's already in the api instance
-const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000/api';
+const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
-/**
- * Object Counter Service
- * Handles all API calls for object counting functionality
- */
 class ObjectCounterService {
-  /**
-   * Fetch all jobs for the current user
-   */
   async fetchJobs() {
     try {
       const response = await api.get('/object-counting/jobs');
@@ -21,9 +13,6 @@ class ObjectCounterService {
     }
   }
 
-  /**
-   * Fetch a single job by ID
-   */
   async fetchJob(jobId) {
     try {
       const response = await api.get(`/object-counting/job/${jobId}`);
@@ -34,9 +23,6 @@ class ObjectCounterService {
     }
   }
 
-  /**
-   * Fetch images for a specific job
-   */
   async fetchJobImages(jobId) {
     try {
       const response = await api.get(`/object-counting/job/${jobId}/images`);
@@ -48,12 +34,6 @@ class ObjectCounterService {
     }
   }
 
-  /**
-   * Upload video file for processing
-   * @param {File} videoFile - The video file to upload
-   * @param {Object} options - Additional options (model_type, capture_images)
-   * @param {Function} onProgress - Progress callback function
-   */
   async uploadVideo(videoFile, options = {}, onProgress = null) {
     const formData = new FormData();
     formData.append('video', videoFile);
@@ -80,12 +60,55 @@ class ObjectCounterService {
     }
   }
 
-  /**
-   * Start stream processing from a camera
-   */
+  async uploadVideoConveyor(videoFile, options = {}, onProgress = null) {
+    const formData = new FormData();
+    formData.append('video', videoFile);
+    formData.append('model_type', options.model_type || 'line');
+    formData.append('capture_images', options.capture_images !== false ? 'true' : 'false');
+    
+    // Add line counter parameters
+    if (options.line_type !== undefined) {
+      formData.append('line_type', options.line_type);
+      console.log('📤 Sending line_type:', options.line_type);
+    }
+    if (options.line_position !== undefined) {
+      formData.append('line_position', String(options.line_position));
+      console.log('📤 Sending line_position:', options.line_position);
+    }
+    if (options.confidence !== undefined) {
+      formData.append('confidence', String(options.confidence));
+      console.log('📤 Sending confidence:', options.confidence);
+    }
+    if (options.class_id !== undefined) {
+      formData.append('class_id', String(options.class_id));
+      console.log('📤 Sending class_id:', options.class_id);
+    }
+
+    try {
+      const response = await api.post('/object-counting/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const progress = (progressEvent.loaded / progressEvent.total) * 100;
+            onProgress(progress);
+          }
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error('Upload failed:', error);
+      throw new Error(error.response?.data?.message || 'Upload failed');
+    }
+  }
+
   async startStream(streamData) {
     try {
+      console.log('📤 Starting stream with data:', streamData);
       const response = await api.post('/object-counting/stream', streamData);
+      console.log('✅ Stream started:', response.data);
       return response.data;
     } catch (error) {
       console.error('Stream start failed:', error);
@@ -93,9 +116,6 @@ class ObjectCounterService {
     }
   }
 
-  /**
-   * Cancel a processing job
-   */
   async cancelJob(jobId) {
     try {
       const response = await api.post(`/object-counting/job/${jobId}/cancel`);
@@ -106,9 +126,6 @@ class ObjectCounterService {
     }
   }
 
-  /**
-   * Delete a job and its associated files
-   */
   async deleteJob(jobId) {
     try {
       const response = await api.delete(`/object-counting/job/${jobId}`);
@@ -119,17 +136,11 @@ class ObjectCounterService {
     }
   }
 
-  /**
-   * Download job results
-   * @param {string} jobId - Job ID
-   * @param {string} format - 'json' or 'video'
-   */
   async downloadResults(jobId, format = 'json') {
     try {
       if (format === 'json') {
         const response = await api.get(`/object-counting/job/${jobId}/download?format=json`);
         
-        // Create blob and download
         const blob = new Blob([JSON.stringify(response.data, null, 2)], { 
           type: 'application/json' 
         });
@@ -144,22 +155,37 @@ class ObjectCounterService {
         
         return response.data;
       } else if (format === 'video') {
-        // For video, open in new tab with authentication
-        const token = localStorage.getItem('authToken');
-        console.log('🌐 Downloading video results with token:', token);
-        const url = `${API_BASE}/object-counting/job/${jobId}/download?format=video&token=${token}`;
-        console.log('🌐 Video download URL:', url);
-        window.open(url, '_blank');
+        console.log('🎬 Downloading video for job:', jobId);
+        
+        // Download via axios with blob response
+        const response = await api.get(
+          `/object-counting/job/${jobId}/download?format=video`,
+          { responseType: 'blob' }
+        );
+        
+        console.log('✅ Video blob received, size:', response.data.size);
+        
+        // Create blob URL and trigger download
+        const blob = new Blob([response.data], { type: 'video/mp4' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `counting_result_${jobId}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        // Clean up
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+        
+        console.log('✅ Video download initiated');
       }
     } catch (error) {
-      console.error('Download failed:', error);
+      console.error('❌ Download failed:', error);
       throw new Error(error.response?.data?.message || 'Failed to download results');
     }
   }
 
-  /**
-   * Get job statistics
-   */
   async getStats(filters = {}) {
     try {
       const response = await api.get('/object-counting/stats', { params: filters });
@@ -170,17 +196,10 @@ class ObjectCounterService {
     }
   }
 
-  /**
-   * Get image URL for displaying
-   */
   getImageUrl(imageUrl) {
-    console.log('Getting full image URL for:', imageUrl);
     return `${API_BASE}${imageUrl}`;
   }
 
-  /**
-   * Save job results to people count logs
-   */
   async saveToPeopleCount(jobId) {
     try {
       const response = await api.post(`/object-counting/job/${jobId}/save-to-people-count`);
@@ -192,5 +211,4 @@ class ObjectCounterService {
   }
 }
 
-// Export singleton instance
 export default new ObjectCounterService();

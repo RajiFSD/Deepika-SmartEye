@@ -1,24 +1,17 @@
 """
-line_counter.py
+line_counter.py - ENHANCED VERSION
 
-Generic line-crossing counter for:
-- People counting (temple, entrance, corridor)
-- Object counting (conveyor belt)
+Supports both horizontal and vertical counting lines for any conveyor orientation.
 
-Usage examples (from your models folder):
+Usage:
+1) Horizontal line (for vertical movement - people/objects moving up/down):
+   python line_counter.py --source video.mp4 --line-type horizontal --line-pos 400
 
-1) Temple people counting from file:
-   python line_counter.py --source input.mp4 --mode person --no-show --output out_temp.mp4
-
-2) Live CCTV (webcam index 0) for people:
-   python line_counter.py --source 0 --mode person
-
-3) Conveyor object counting (using YOLO class 0 by default or custom model):
-   python line_counter.py --source conveyor.mp4 --mode object --no-show --output out_conv.mp4
+2) Vertical line (for horizontal movement - objects moving left/right):
+   python line_counter.py --source video.mp4 --line-type vertical --line-pos 600
 """
 
 import argparse
-import math
 import time
 from typing import List, Tuple, Dict, Optional, Set
 
@@ -28,35 +21,23 @@ from ultralytics import YOLO
 
 
 # =========================
-# CONFIG (adjust for your scene)
+# CONFIG
 # =========================
-
-# For a horizontal line (y = constant) across the frame
-LINE_Y = 300          # adjust based on your video height
-LINE_THICKNESS = 2
-
-# Directions:
-#  - For temple entrance: people moving from bottom to top -> use "up"
-#  - For conveyor (objects moving from left to right or right to left),
-#    you can still use a horizontal line and count just crossing, or
-#    adapt logic for vertical line if needed.
-COUNT_DIRECTION = "any"  # "up", "down", or "any"
-
-# Tracker parameters
-MAX_MISSED = 15      # how many frames a track can be missing before deleted
+LINE_THICKNESS = 4
+COUNT_DIRECTION = "any"  # "up", "down", "left", "right", or "any"
+MAX_MISSED = 15
 IOU_THRESH = 0.3
 
 
 # =========================
 # Simple Tracker
 # =========================
-
 class Track:
     def __init__(self, track_id: int, bbox: Tuple[int, int, int, int]):
         self.id = track_id
         self.bbox = bbox
         self.missed = 0
-        self.history = []  # list of centroids
+        self.history = []
 
     @property
     def centroid(self):
@@ -65,10 +46,6 @@ class Track:
 
 
 class SimpleTracker:
-    """
-    Very simple IOU-based tracker for static CCTV.
-    """
-
     def __init__(self, max_missed: int = MAX_MISSED, iou_thresh: float = IOU_THRESH):
         self.tracks: Dict[int, Track] = {}
         self.next_id = 1
@@ -94,18 +71,15 @@ class SimpleTracker:
         return inter / union
 
     def update(self, detections: List[Tuple[int, int, int, int]]) -> Dict[int, Track]:
-        # Mark all existing tracks as missed by default
         for t in self.tracks.values():
             t.missed += 1
 
-        # If no detections, just clean up
         if not detections:
             to_del = [tid for tid, t in self.tracks.items() if t.missed > self.max_missed]
             for tid in to_del:
                 del self.tracks[tid]
             return self.tracks
 
-        # Associate detections to existing tracks using greedy IoU
         assigned_dets = set()
         for det in detections:
             best_iou = 0.0
@@ -117,14 +91,12 @@ class SimpleTracker:
                     best_id = tid
 
             if best_id is not None:
-                # Assign detection to this track
                 tr = self.tracks[best_id]
                 tr.bbox = det
                 tr.missed = 0
                 assigned_dets.add(det)
                 tr.history.append(tr.centroid)
 
-        # Unassigned detections -> new tracks
         for det in detections:
             if det in assigned_dets:
                 continue
@@ -133,7 +105,6 @@ class SimpleTracker:
             self.tracks[self.next_id] = new_track
             self.next_id += 1
 
-        # Remove dead tracks
         to_del = [tid for tid, t in self.tracks.items() if t.missed > self.max_missed]
         for tid in to_del:
             del self.tracks[tid]
@@ -142,26 +113,16 @@ class SimpleTracker:
 
 
 # =========================
-# YOLO-based detector
+# Detector
 # =========================
-
 class Detector:
     def __init__(self, model_name="yolov8n.pt", mode="person", conf_thresh=0.3, cls_id=0):
-        """
-        mode: "person" or "object"
-        cls_id:
-          - for 'person' with COCO model, person is class 0
-          - for custom conveyor model, set appropriate class id
-        """
         self.model = YOLO(model_name)
         self.mode = mode
         self.conf_thresh = conf_thresh
         self.cls_id = cls_id
 
     def detect(self, frame) -> List[Tuple[int, int, int, int]]:
-        """
-        Returns list of bboxes (x1, y1, x2, y2).
-        """
         results = self.model(frame, verbose=False)[0]
         bboxes = []
 
@@ -175,10 +136,9 @@ class Detector:
                 continue
 
             if self.mode == "person":
-                if cls != 0:  # person in COCO
+                if cls != 0:
                     continue
             else:
-                # object mode: either filter by cls_id or take all
                 if self.cls_id >= 0 and cls != self.cls_id:
                     continue
 
@@ -189,25 +149,30 @@ class Detector:
 
 
 # =========================
-# Counting logic
+# Counting Logic - ENHANCED
 # =========================
-
-def check_crossing(prev_y: float, curr_y: float, line_y: int, direction: str) -> bool:
-    """
-    Returns True if path from prev_y to curr_y crosses line_y
-    according to the direction.
-    """
+def check_crossing_horizontal(prev_y: float, curr_y: float, line_y: int, direction: str) -> bool:
+    """Check if object crossed a horizontal line (for vertical movement)"""
     if direction == "up":
-        # moved from below the line to above
         return prev_y > line_y and curr_y <= line_y
     elif direction == "down":
-        # moved from above the line to below
         return prev_y < line_y and curr_y >= line_y
     else:  # "any"
-        # crossed line in any direction
         crossed_up = prev_y > line_y and curr_y <= line_y
         crossed_down = prev_y < line_y and curr_y >= line_y
         return crossed_up or crossed_down
+
+
+def check_crossing_vertical(prev_x: float, curr_x: float, line_x: int, direction: str) -> bool:
+    """Check if object crossed a vertical line (for horizontal movement)"""
+    if direction == "right":
+        return prev_x < line_x and curr_x >= line_x
+    elif direction == "left":
+        return prev_x > line_x and curr_x <= line_x
+    else:  # "any"
+        crossed_right = prev_x < line_x and curr_x >= line_x
+        crossed_left = prev_x > line_x and curr_x <= line_x
+        return crossed_right or crossed_left
 
 
 def run_counter(
@@ -219,8 +184,16 @@ def run_counter(
     output_path: Optional[str] = None,
     process_fps: Optional[float] = None,
     show_window: bool = True,
+    line_type: str = "horizontal",  # NEW: "horizontal" or "vertical"
+    line_position: int = 400,       # NEW: unified parameter for both X and Y
 ):
-    # Prepare source (0 or video path)
+    """
+    Run object counter with configurable line orientation.
+    
+    Args:
+        line_type: "horizontal" (for vertical movement) or "vertical" (for horizontal movement)
+        line_position: Y-coordinate for horizontal line, X-coordinate for vertical line
+    """
     try:
         if len(source) == 1 and source.isdigit():
             src = int(source)
@@ -232,7 +205,7 @@ def run_counter(
     cap = cv2.VideoCapture(src)
     if not cap.isOpened():
         print(f"[ERROR] Cannot open source: {source}")
-        return
+        return 0
 
     input_fps = cap.get(cv2.CAP_PROP_FPS)
     if input_fps <= 0:
@@ -241,7 +214,6 @@ def run_counter(
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # create writer if needed
     writer = None
     if output_path is not None:
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -250,18 +222,23 @@ def run_counter(
     detector = Detector(model_name=model_name, mode=mode, conf_thresh=conf_thresh, cls_id=class_id)
     tracker = SimpleTracker()
 
-    # For frame skipping (optional)
     process_interval = None
     last_process_time = 0.0
     if process_fps is not None and process_fps > 0:
         process_interval = 1.0 / process_fps
 
-    # Counting state
     total_count = 0
-    already_counted: Set[int] = set()  # track IDs that already triggered count
+    already_counted: Set[int] = set()
 
     frame_idx = 0
     start_time = time.time()
+
+    print(f"\n🎯 Line Configuration:")
+    print(f"   Type: {line_type}")
+    print(f"   Position: {line_position}")
+    print(f"   Direction: {COUNT_DIRECTION}")
+    print(f"   Mode: {mode}")
+    print(f"   Confidence: {conf_thresh}\n")
 
     while True:
         ret, frame = cap.read()
@@ -280,26 +257,23 @@ def run_counter(
         if run_det:
             bboxes = detector.detect(frame)
         else:
-            # no new detections, but tracker still ages tracks
             bboxes = []
 
-        # Update tracker
         tracks = tracker.update(bboxes)
 
-        # Draw counting line
-        cv2.line(
-            frame,
-            (0, LINE_Y),
-            (width, LINE_Y),
-            (255, 0, 0),
-            LINE_THICKNESS,
-        )
+        # Draw counting line based on type
+        if line_type == "horizontal":
+            # Horizontal line for vertical movement
+            cv2.line(frame, (0, line_position), (width, line_position), (255, 0, 0), LINE_THICKNESS)
+        else:
+            # Vertical line for horizontal movement
+            cv2.line(frame, (line_position, 0), (line_position, height), (255, 0, 0), LINE_THICKNESS)
 
-        # For each track, check if it crosses counting line
+        # Check crossings for each track
         for tid, tr in tracks.items():
             cx, cy = tr.centroid
 
-            # Get previous y
+            # Get previous position
             if len(tr.history) >= 2:
                 prev_cx, prev_cy = tr.history[-2]
             elif len(tr.history) == 1:
@@ -307,12 +281,20 @@ def run_counter(
             else:
                 prev_cx, prev_cy = cx, cy
 
-            # Save current centroid to history
+            # Update history
             if not tr.history or tr.history[-1] != (cx, cy):
                 tr.history.append((cx, cy))
 
+            # Check crossing based on line type
             if tid not in already_counted:
-                if check_crossing(prev_cy, cy, LINE_Y, COUNT_DIRECTION):
+                crossed = False
+                
+                if line_type == "horizontal":
+                    crossed = check_crossing_horizontal(prev_cy, cy, line_position, COUNT_DIRECTION)
+                else:  # vertical
+                    crossed = check_crossing_vertical(prev_cx, cx, line_position, COUNT_DIRECTION)
+                
+                if crossed:
                     total_count += 1
                     already_counted.add(tid)
 
@@ -331,7 +313,7 @@ def run_counter(
                 cv2.LINE_AA,
             )
 
-        # Put counter text
+        # Display counter
         label_mode = "Persons" if mode == "person" else "Objects"
         cv2.putText(
             frame,
@@ -375,24 +357,34 @@ def run_counter(
     print("\n==========================")
     print("  PROCESSING FINISHED")
     print("==========================")
-    print(f"Total {label_mode.lower()} counted across line: {total_count}")
+    print(f"Total {label_mode.lower()} counted: {total_count}")
+    print(f"Line type: {line_type} at position {line_position}")
     print("==========================\n")
+    
+    return total_count
 
 
 # =========================
 # CLI
 # =========================
-
 def parse_args():
-    p = argparse.ArgumentParser(description="Line crossing counter (people / objects)")
-    p.add_argument("--source", type=str, required=True, help="Video path, camera index (e.g. '0'), or stream URL")
-    p.add_argument("--mode", type=str, default="person", choices=["person", "object"], help="Counting mode")
-    p.add_argument("--model", type=str, default="yolov8n.pt", help="YOLO model path or name")
-    p.add_argument("--conf", type=float, default=0.3, help="Confidence threshold")
-    p.add_argument("--class-id", type=int, default=0, help="Class ID for object mode (ignored for person mode)")
-    p.add_argument("--output", type=str, default=None, help="Optional output video path")
-    p.add_argument("--process-fps", type=float, default=None, help="Detection FPS (None = every frame)")
-    p.add_argument("--no-show", action="store_true", help="Do not display window (for servers / no GUI)")
+    p = argparse.ArgumentParser(description="Enhanced line crossing counter")
+    p.add_argument("--source", type=str, required=True, help="Video path or camera index")
+    p.add_argument("--mode", type=str, default="person", choices=["person", "object"])
+    p.add_argument("--model", type=str, default="yolov8n.pt")
+    p.add_argument("--conf", type=float, default=0.3)
+    p.add_argument("--class-id", type=int, default=0)
+    p.add_argument("--output", type=str, default=None)
+    p.add_argument("--process-fps", type=float, default=None)
+    p.add_argument("--no-show", action="store_true")
+    
+    # NEW PARAMETERS
+    p.add_argument("--line-type", type=str, default="horizontal", 
+                   choices=["horizontal", "vertical"],
+                   help="Line orientation: horizontal (for vertical movement) or vertical (for horizontal movement)")
+    p.add_argument("--line-pos", type=int, default=400,
+                   help="Line position: Y for horizontal, X for vertical")
+    
     return p.parse_args()
 
 
@@ -407,4 +399,6 @@ if __name__ == "__main__":
         output_path=args.output,
         process_fps=args.process_fps,
         show_window=not args.no_show,
+        line_type=args.line_type,
+        line_position=args.line_pos,
     )

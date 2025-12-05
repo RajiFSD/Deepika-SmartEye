@@ -1,10 +1,15 @@
 const { PeopleCountLog, Camera, Tenant, Branch, ZoneConfig } = require("@models");
 const { Op } = require("sequelize");
 const { sequelize } = require("@config/database");
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+
 
 class PeopleCountService {
   async createPeopleCountLog(data) {
     try {
+      console.log("Creating people count log with data:", data);
       return await PeopleCountLog.create(data);
     } catch (error) {
       console.error("Error creating people count log:", error);
@@ -309,6 +314,205 @@ class PeopleCountService {
 
     return Array.from(resultMap.values()).sort((a, b) => a.date.localeCompare(b.date));
   }
+
+    /**
+   * Process uploaded video for people counting with gender detection
+   * @param {string} videoPath - Path to uploaded video file
+   * @param {Object} options - Processing options
+   * @returns {Promise<Object>} - Processing results with detections
+   */
+  async processVideoForPeopleCounting(videoPath, direction = 'LEFT_RIGHT') {
+  return new Promise((resolve, reject) => {
+    console.log('🎬 Starting video processing for people counting');
+    console.log('📁 Video path:', videoPath);
+    console.log('➡️ Direction:', direction);
+
+    // Correct path to your virtual environment
+    const venvPath = path.join(__dirname, '../../../ai-module/venv');
+    
+    // Check if venv exists
+    if (!fs.existsSync(venvPath)) {
+      console.error('❌ Virtual environment not found at:', venvPath);
+      return reject(new Error('Python virtual environment not found. Please run setup.'));
+    }
+
+    // Python executable path (Windows)
+    const pythonPath = path.join(venvPath, 'Scripts', 'python.exe');
+    
+    // Check if python.exe exists
+    if (!fs.existsSync(pythonPath)) {
+      console.error('❌ Python executable not found at:', pythonPath);
+      return reject(new Error('Python executable not found in virtual environment.'));
+    }
+
+    // Python script path
+    const scriptPath = path.join(__dirname, '../../../ai-module/src/models/people_count_video.py');
+    
+    // Check if script exists
+    if (!fs.existsSync(scriptPath)) {
+      console.error('❌ Python script not found at:', scriptPath);
+      return reject(new Error('Python script not found.'));
+    }
+
+    console.log('✅ Python path:', pythonPath);
+    console.log('✅ Script path:', scriptPath);
+
+    // Spawn Python process
+    const pythonProcess = spawn(pythonPath, [scriptPath, videoPath, direction]);
+
+    let stdoutData = '';
+    let stderrData = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      stdoutData += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      const message = data.toString();
+      stderrData += message;
+      // Log progress messages
+      if (message.includes('Progress:') || message.includes('Processing')) {
+        console.log('🔄', message.trim());
+      }
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code !== 0) {
+        console.error('❌ Python process failed with code:', code);
+        console.error('stderr:', stderrData);
+        return reject(new Error(`Python process exited with code ${code}: ${stderrData}`));
+      }
+
+      try {
+        // Parse JSON output from stdout
+        const result = JSON.parse(stdoutData);
+        
+        if (!result.success) {
+          console.error('❌ Processing failed:', result.error);
+          return reject(new Error(result.error || 'Video processing failed'));
+        }
+
+        console.log('✅ Video processing completed successfully');
+        console.log('📊 Summary:', result.summary);
+        resolve(result);
+      } catch (error) {
+        console.error('❌ Failed to parse Python output:', error);
+        console.error('stdout:', stdoutData);
+        reject(new Error('Failed to parse processing results: ' + error.message));
+      }
+    });
+
+    pythonProcess.on('error', (error) => {
+      console.error('❌ Failed to start Python process:', error);
+      reject(new Error('Failed to start Python process: ' + error.message));
+    });
+  });
+}
+
+
+  /**
+   * Save detections to database
+   * @param {Array} detections - Array of detection objects
+   * @param {Object} metadata - Camera and location metadata
+   * @returns {Promise<number>} - Number of saved detections
+   */
+  async saveDetectionsToDatabase(detections, metadata) {
+    const { PeopleCountLog } = require('@models');
+    const { camera_id, tenant_id, branch_id, zone_id } = metadata;
+
+    if (!camera_id || !tenant_id || !branch_id) {
+      console.warn('⚠️ Missing required metadata, skipping database save');
+      return 0;
+    }
+
+    let savedCount = 0;
+
+    for (const detection of detections) {
+      try {
+        await PeopleCountLog.create({
+          camera_id,
+          tenant_id,
+          branch_id,
+          zone_id: zone_id || null,
+          person_id: detection.person_id || `person_${Date.now()}_${Math.random()}`,
+          direction: detection.direction || 'IN',
+          detection_time: new Date(),
+          frame_number: detection.frame_number || null,
+          confidence_score: detection.confidence || null,
+          metadata: {
+            gender: detection.gender || 'unknown',
+            position: detection.position || null,
+            timestamp: detection.timestamp || null,
+            source: 'video_upload'
+          }
+        });
+        savedCount++;
+      } catch (err) {
+        console.error('❌ Error saving detection:', err);
+        // Continue with other detections
+      }
+    }
+
+    return savedCount;
+  }
+
+  /**
+   * Get video processing statistics
+   * @param {Object} filters - Filter options
+   * @returns {Promise<Object>} - Statistics summary
+   */
+  async getVideoProcessingStats(filters = {}) {
+    const { PeopleCountLog } = require('@models');
+    const { Op } = require('sequelize');
+
+    const where = {};
+
+    if (filters.camera_id) where.camera_id = filters.camera_id;
+    if (filters.tenant_id) where.tenant_id = filters.tenant_id;
+    if (filters.branch_id) where.branch_id = filters.branch_id;
+    
+    // Filter for video uploads only
+    where['metadata.source'] = 'video_upload';
+
+    if (filters.start_date && filters.end_date) {
+      where.detection_time = {
+        [Op.between]: [new Date(filters.start_date), new Date(filters.end_date)]
+      };
+    }
+
+    const logs = await PeopleCountLog.findAll({
+      where,
+      attributes: ['direction', 'metadata'],
+      raw: true
+    });
+
+    const stats = {
+      total_detections: logs.length,
+      male_count: 0,
+      female_count: 0,
+      unknown_count: 0,
+      entries: 0,
+      exits: 0
+    };
+
+    logs.forEach(log => {
+      // Count by direction
+      if (log.direction === 'IN') stats.entries++;
+      if (log.direction === 'OUT') stats.exits++;
+
+      // Count by gender
+      const gender = log.metadata?.gender || 'unknown';
+      if (gender === 'male') stats.male_count++;
+      else if (gender === 'female') stats.female_count++;
+      else stats.unknown_count++;
+    });
+
+    return stats;
+  }
+
+
+
+
 }
 
 module.exports = new PeopleCountService();

@@ -6,6 +6,9 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const WebSocket = require("ws");
+const wss = new WebSocket.Server({ noServer: true });
+
 
 // Load environment variables
 dotenv.config();
@@ -23,7 +26,8 @@ const authRoutes = require('./routes/auth.routes');
 const cameraRoutes = require('./routes/camera.routes');
 const alertRoutes = require('./routes/alert.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
-const peopleCountRoutes = require('./routes/peopleCount.routes');
+//const peopleCountRoutes = require('./routes/peopleCount.routes');
+const peopleCountRoutes = require("./routes/peopleCount.routes")(wss);
 const reportRoutes = require('./routes/report.routes');
 const uploadRoutes = require('./routes/upload.routes');
 const zoneRoutes = require('./routes/zone.routes');
@@ -279,6 +283,13 @@ class Server {
 🌐 CORS enabled for: http://localhost:5173
       `);
     });
+    
+      // ✅ Add this block
+  this.server.on('upgrade', (request, socket, head) => {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  });
 
     this.setupGracefulShutdown();
   }

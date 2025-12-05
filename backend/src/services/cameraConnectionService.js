@@ -102,10 +102,13 @@ class CameraConnectionService {
         isActive: true
       };
 
-      // Handle FFmpeg output (frames)
+   
+
       ffmpeg.stdout.on('data', (data) => {
-        onFrame(data, streamId);
-      });
+  // 🔴 ADD THIS: Store the latest frame
+  streamData.latestFrame = data;
+  onFrame(data, streamId);
+});
 
       // Handle errors
       ffmpeg.stderr.on('data', (data) => {
@@ -149,87 +152,126 @@ class CameraConnectionService {
     }
   }
 
+ // Add this method to your cameraConnectionService.js if it's missing
+// Place it near the end of the class, before the closing brace
+
+/**
+ * Get the latest frame from a stream
+ * This is called by the video streaming endpoint
+ */
+getLatestFrame(streamId) {
+  const streamData = this.activeStreams.get(streamId);
+  if (!streamData) {
+    return null;
+  }
+  return streamData.latestFrame || null;
+}
+
+/**
+ * Check if a stream is active
+ */
+isStreaming(streamId) {
+  const streamData = this.activeStreams.get(streamId);
+  return streamData && streamData.isActive === true;
+}
+
+/**
+ * Get all active stream IDs
+ */
+getActiveStreams() {
+  const activeIds = [];
+  for (const [streamId, streamData] of this.activeStreams.entries()) {
+    if (streamData.isActive) {
+      activeIds.push(streamId);
+    }
+  }
+  return activeIds;
+}
   /**
-   * Fetch HTTP/MJPEG stream and convert to frames
-   */
-  startHttpStreamFetch(streamId, streamUrl, onFrame, onError) {
-    try {
-      const httpModule = streamUrl.startsWith('https://') ? https : http;
-      
-      const request = httpModule.get(streamUrl, (response) => {
-        if (response.statusCode !== 200) {
-          onError(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
-          this.activeStreams.delete(streamId);
+ * Fetch HTTP/MJPEG stream and convert to frames
+ */
+startHttpStreamFetch(streamId, streamUrl, onFrame, onError) {
+  try {
+    const httpModule = streamUrl.startsWith('https://') ? https : http;
+    
+    const request = httpModule.get(streamUrl, (response) => {
+      if (response.statusCode !== 200) {
+        onError(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+        this.activeStreams.delete(streamId);
+        return;
+      }
+
+      console.log(`✅ Connected to HTTP stream: ${streamId}`);
+      //console.log(`Content-Type: ${response.headers['content-type']}`);
+
+      let buffer = Buffer.alloc(0);
+      const boundary = this.extractBoundary(response.headers['content-type']);
+
+      response.on('data', (chunk) => {
+        // Check if stream is still active
+        const streamData = this.activeStreams.get(streamId);
+        if (!streamData || !streamData.isActive) {
+          request.abort();
           return;
         }
 
-        console.log(`✅ Connected to HTTP stream: ${streamId}`);
-        console.log(`Content-Type: ${response.headers['content-type']}`);
+        buffer = Buffer.concat([buffer, chunk]);
 
-        let buffer = Buffer.alloc(0);
-        const boundary = this.extractBoundary(response.headers['content-type']);
-
-        response.on('data', (chunk) => {
-          // Check if stream is still active
-          const streamData = this.activeStreams.get(streamId);
-          if (!streamData || !streamData.isActive) {
-            request.abort();
-            return;
-          }
-
-          buffer = Buffer.concat([buffer, chunk]);
-
-          // Extract JPEG frames from MJPEG stream
-          if (boundary) {
-            const frames = this.extractFrames(buffer, boundary);
-            frames.forEach(frame => {
-              if (frame && frame.length > 0) {
-                onFrame(frame, streamId);
-              }
-            });
-          } else {
-            // If no boundary, assume single JPEG or continuous stream
-            const jpegStart = buffer.indexOf(Buffer.from([0xFF, 0xD8])); // JPEG SOI
-            const jpegEnd = buffer.indexOf(Buffer.from([0xFF, 0xD9])); // JPEG EOI
-            
-            if (jpegStart !== -1 && jpegEnd !== -1 && jpegEnd > jpegStart) {
-              const frame = buffer.slice(jpegStart, jpegEnd + 2);
+        // Extract JPEG frames from MJPEG stream
+        if (boundary) {
+          const frames = this.extractFrames(buffer, boundary);
+          frames.forEach(frame => {
+            if (frame && frame.length > 0) {
+              // 🔴 ADD THIS: Store the latest frame
+              streamData.latestFrame = frame;
               onFrame(frame, streamId);
-              buffer = buffer.slice(jpegEnd + 2);
             }
+          });
+        } else {
+          // If no boundary, assume single JPEG or continuous stream
+          const jpegStart = buffer.indexOf(Buffer.from([0xFF, 0xD8])); // JPEG SOI
+          const jpegEnd = buffer.indexOf(Buffer.from([0xFF, 0xD9])); // JPEG EOI
+          
+          if (jpegStart !== -1 && jpegEnd !== -1 && jpegEnd > jpegStart) {
+            const frame = buffer.slice(jpegStart, jpegEnd + 2);
+            // 🔴 ADD THIS: Store the latest frame
+            streamData.latestFrame = frame;
+            onFrame(frame, streamId);
+            buffer = buffer.slice(jpegEnd + 2);
           }
-        });
-
-        response.on('end', () => {
-          console.log(`HTTP stream ended: ${streamId}`);
-          this.activeStreams.delete(streamId);
-        });
-
-        response.on('error', (error) => {
-          console.error(`HTTP stream error for ${streamId}:`, error);
-          onError(error);
-          this.activeStreams.delete(streamId);
-        });
+        }
       });
 
-      request.on('error', (error) => {
-        console.error(`HTTP request error for ${streamId}:`, error);
-        onError(error);
+      response.on('end', () => {
+        console.log(`HTTP stream ended: ${streamId}`);
         this.activeStreams.delete(streamId);
       });
 
-      // Store the request so we can abort it later
-      const streamData = this.activeStreams.get(streamId);
-      if (streamData) {
-        streamData.request = request;
-      }
+      response.on('error', (error) => {
+        console.error(`HTTP stream error for ${streamId}:`, error);
+        onError(error);
+        this.activeStreams.delete(streamId);
+      });
+    });
 
-    } catch (error) {
-      console.error(`Failed to fetch HTTP stream ${streamId}:`, error);
+    request.on('error', (error) => {
+      console.error(`HTTP request error for ${streamId}:`, error);
       onError(error);
       this.activeStreams.delete(streamId);
+    });
+
+    // Store the request so we can abort it later
+    const streamData = this.activeStreams.get(streamId);
+    if (streamData) {
+      streamData.request = request;
     }
+
+  } catch (error) {
+    console.error(`Failed to fetch HTTP stream ${streamId}:`, error);
+    onError(error);
+    this.activeStreams.delete(streamId);
   }
+}
 
   /**
    * Extract boundary from Content-Type header
@@ -275,8 +317,9 @@ class CameraConnectionService {
    */
   stopStream(streamId) {
     try {
+      console.log(`🛑 Stopping stream ${streamId}`);
       const streamData = this.activeStreams.get(streamId);
-      
+      console.log(`🛑 Retrieved stream data for ${streamId}:`, streamData);
       if (!streamData) {
         return {
           success: false,

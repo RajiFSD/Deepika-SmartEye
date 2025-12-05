@@ -3,7 +3,9 @@ import axios from 'axios';
 // ✅ Updated to work with your existing backend
 const CAMERA_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 const UPLOAD_ANALYSIS_BASE = `${CAMERA_API_URL.replace(/\/api\/?$/, '')}/api/upload-analysis`;
-const CAMERA_API_ORIGIN = CAMERA_API_URL.replace(/\/api\/?$/, '');
+//const CAMERA_API_ORIGIN = CAMERA_API_URL.replace(/\/api\/?$/, '');
+const CAMERA_API_ORIGIN = CAMERA_API_URL;
+
 
 const cameraApi = axios.create({
   baseURL: CAMERA_API_URL,
@@ -49,19 +51,18 @@ export async function testCamera(cameraConfig) {
  * @param {Object} cameraConfig - Camera configuration
  * @returns {Promise<Object>} Stream info with streamId, streamUrl, and cameraStreamUrl
  */
-export async function startStream(cameraConfig) {
+
+export const startStream = async (config) => {
   try {
-    console.log('📷 Starting camera stream with config:', cameraConfig);
-    
-    // Call your existing backend endpoint
+    console.log("inside start stream service-I");
+    console.log('🚀 Starting stream with Config:', config);
+   
     const { data } = await cameraApi.post('/camera/stream', {
-      camera_id: cameraConfig.camera_id,
-      stream_url: cameraConfig.stream_url,
-      ip_address: cameraConfig.ip_address,
-      port: cameraConfig.port,
-      protocol: cameraConfig.protocol,
-      username: cameraConfig.username,
-      password: cameraConfig.password
+      camera_id: config?.camera_id,
+      tenant_id: config?.tenant_id,
+      branch_id: config?.branch_id,
+      processing_fps: 1,
+      resolution: "1280x720"
     });
     
     if (!data?.success) {
@@ -72,8 +73,8 @@ export async function startStream(cameraConfig) {
     
     // Extract stream information
     const streamId = data.streamId || data.stream_id || null;
-    const streamUrl = data.streamUrl || data.stream_url || null;
-    const cameraStreamUrl = data.cameraStreamUrl || cameraConfig.stream_url || null;
+    const streamUrl = data.streamUrl || data.stream_url || null;    
+    const cameraStreamUrl = data.cameraStreamUrl || null;
     
     // Convert relative URLs to absolute
     const streamUrlAbsolute = toAbsolute(streamUrl);
@@ -102,7 +103,7 @@ export async function stopStream(streamId) {
     const path = streamId 
       ? `/camera/stop/${encodeURIComponent(streamId)}` 
       : '/camera/stop';
-    
+    console.log('⏹️ Stop stream path:', path);
     const { data } = await cameraApi.post(path);
     
     console.log('✅ Stream stopped:', data);
@@ -292,11 +293,40 @@ export async function healthCheck() {
 }
 
 /**
+ * Build MJPEG player URL and raw camera URL for Python
+ * @param {Object} options
+ * @param {string} options.streamType - 'http' | 'rtsp' | etc.
+ * @param {string} options.streamId   - Local stream identifier (e.g. "camera_5")
+ * @param {Object} options.camera     - Selected camera config
+ * @returns {{ mjpegUrl: string, rawCameraUrl: string }}
+ */
+export function buildStreamUrls({ streamType, streamId, camera }) {
+  let mjpegUrl = '';
+
+  // For HTTP / RTSP streams, we expose /camera/video/:streamId
+  if (streamType === 'http' || streamType === 'rtsp') {
+    mjpegUrl = buildStreamUrl(streamId); // uses toAbsolute + /camera/video/:id
+  }
+ 
+  // Raw camera URL for Python
+  // Prefer explicit stream_url, then ip/port/path, else fallback to mjpeg
+  const rawCameraUrl =
+    camera?.stream_url ||
+    buildDirectCameraUrl(camera) ||
+    mjpegUrl;
+
+  return { mjpegUrl, rawCameraUrl };
+}
+
+
+/**
  * Build stream URL from stream ID
  * @param {string} streamId - Stream identifier
  */
 export function buildStreamUrl(streamId) {
+  if (!streamId) return null;
   return toAbsolute(`/camera/video/${encodeURIComponent(streamId)}`);
+  //return toAbsolute(`api/camera/video/${(streamId)}`);
 }
 
 /**
@@ -329,5 +359,6 @@ export default {
   getDetectionCapabilities,
   healthCheck,
   buildStreamUrl,
-  buildDirectCameraUrl
+  buildDirectCameraUrl,
+  buildStreamUrls,
 };

@@ -4,10 +4,13 @@ const router = express.Router();
 const multer = require('multer');
 const axios = require('axios');
 const FormData = require('form-data');
+const path = require('path');
+const fs = require('fs');
 
 // Import controller
 const uploadAnalysisController = require('../controllers/uploadAnalysisController');
 const detectionIntegrationService = require('../services/detectionIntegrationService');
+const peopleCountService = require('../services/peopleCountService');
 
 // CHECK: Log what we imported
 console.log('📦 Imported uploadAnalysisController:', uploadAnalysisController);
@@ -18,27 +21,45 @@ const DETECTION_SERVICE_URL = process.env.DETECTION_SERVICE_URL || 'http://local
 
 // Configure multer for different upload types
 const storage = multer.memoryStorage();
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 500 * 1024 * 1024, // 500MB for videos
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedVideoTypes = /mp4|avi|mov|mkv|webm/;
-    const allowedImageTypes = /jpeg|jpg|png/;
-    const ext = file.originalname.toLowerCase().match(/\.[^.]*$/)[0];
-    
-    if (allowedVideoTypes.test(ext) || allowedImageTypes.test(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only videos and images allowed.'));
-    }
+const fileFilter = (req, file, cb) => {
+  // ✅ Allow requests without a file (live frame detection)
+  if (!file) {
+    return cb(null, true);
   }
+
+  if (!file.originalname) {
+    return cb(null, true);
+  }
+
+  const match = file.originalname.toLowerCase().match(/\.[^.]*$/);
+
+  // ✅ No extension, allow for detection frames
+  if (!match) {
+    return cb(null, true);
+  }
+
+  const ext = match[0];
+
+  const allowedVideoTypes = /mp4|avi|mov|mkv|webm/;
+  const allowedImageTypes = /jpeg|jpg|png/;
+
+  if (allowedVideoTypes.test(ext) || allowedImageTypes.test(ext)) {
+    return cb(null, true);
+  }
+
+  return cb(new Error('Invalid file type'));
+};
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 500 * 1024 * 1024 },
+  fileFilter
 });
+
 
 // Simple middleware for testing (replace with your auth later)
 const authenticate = (req, res, next) => {
-  console.log('🔐 Authenticating request..Testing iniplaodAnalysisRoutes.');
+  console.log('🔐 Authenticating request..Testing upplaodAnalysisRoutes.');
   // Mock user for testing - REPLACE THIS WITH YOUR ACTUAL AUTH
   req.user = {
     user_id: 1,
@@ -150,8 +171,269 @@ if (typeof uploadAnalysisController.getStreamCounts === 'function') {
   });
 }
 
+
+// Configure multer for video uploads (if not already configured)
+const videoStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '../../uploads/videos/people-count');
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'people-count-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const videoUpload = multer({
+  storage: videoStorage,
+  limits: {
+    fileSize: 200 * 1024 * 1024 // 200MB limit
+  },
+  fileFilter: function (req, file, cb) {
+    const allowedTypes = /mp4|avi|mov|wmv|mkv|flv|webm/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = file.mimetype.startsWith('video/');
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only video files are allowed!'));
+    }
+  }
+});
+
+
 // ============================================
 // 🆕 GENDER DETECTION ROUTES
+// ============================================
+
+
+/**
+ * ============================================
+ * POST /api/upload-analysis/people-count/video
+ * Process uploaded video for people counting with gender detection
+ * ============================================
+ */
+console.log('📹 Registering route: POST /people-count/video');
+router.post('/people-count/video', authenticate, videoUpload.single('video'), async (req, res) => {
+  console.log('🎬 POST /people-count/video called');
+  console.log('📦 Request body:', req.body);
+  console.log('📁 Uploaded file:', req.file ? {
+    originalname: req.file.originalname,
+    size: `${(req.file.size / 1024 / 1024).toFixed(2)} MB`,
+    path: req.file.path
+  } : 'No file');
+
+  try {
+    // Validate file upload
+    if (!req.file) {
+      console.error('❌ No video file uploaded');
+      return res.status(400).json({
+        success: false,
+        message: 'No video file uploaded'
+      });
+    }
+
+    // Extract parameters
+    const {
+      tenant_id,
+      branch_id,
+      user_id,
+      camera_id = null,
+      zone_id = null,
+      direction = 'LEFT_RIGHT'
+    } = req.body;
+
+    // Validate required fields
+    if (!tenant_id || !branch_id) {
+      console.error('❌ Missing required fields:', { tenant_id, branch_id });
+      return res.status(400).json({
+        success: false,
+        message: 'tenant_id and branch_id are required'
+      });
+    }
+
+    console.log('✅ Processing video with params:', {
+      tenant_id,
+      branch_id,
+      user_id,
+      camera_id,
+      zone_id,
+      direction,
+      filename: req.file.originalname,
+      size: req.file.size
+    });
+
+    // Process video using people count service
+    const result = await peopleCountService.processVideoForPeopleCounting(
+      req.file.path,
+      {
+        direction,
+        camera_id: camera_id ? parseInt(camera_id) : null,
+        tenant_id: parseInt(tenant_id),
+        branch_id: parseInt(branch_id),
+        zone_id: zone_id ? parseInt(zone_id) : null
+      }
+    );
+
+    console.log('✅ Video processing completed');
+    console.log('📊 Summary:', result.summary);
+    console.log('🔢 Total detections:', result.detections?.length || 0);
+
+    // Return results to frontend
+    res.json({
+      success: true,
+      message: 'Video processed successfully',
+      summary: {
+        male: result.summary.male || 0,
+        female: result.summary.female || 0,
+        total: result.summary.total || 0,
+        entered_male: result.summary.entered_male || 0,
+        entered_female: result.summary.entered_female || 0,
+        exited_male: result.summary.exited_male || 0,
+        exited_female: result.summary.exited_female || 0
+      },
+      detections: result.detections || [],
+      video_info: result.video_info || {},
+      saved_to_database: result.saved_to_database || 0
+    });
+
+  } catch (error) {
+    console.error('❌ Video processing error:', error);
+    console.error('Stack trace:', error.stack);
+
+    // Clean up uploaded file on error
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+        console.log('🗑️ Cleaned up failed upload');
+      } catch (unlinkErr) {
+        console.error('Warning: Could not delete file:', unlinkErr);
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process video',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+/**
+ * ============================================
+ * GET /api/upload-analysis/people-count/stats
+ * Get statistics for processed videos
+ * ============================================
+ */
+console.log('📊 Registering route: GET /people-count/stats');
+router.get('/people-count/stats', authenticate, async (req, res) => {
+  console.log('📊 GET /people-count/stats called');
+
+  try {
+    const {
+      camera_id,
+      tenant_id,
+      branch_id,
+      start_date,
+      end_date
+    } = req.query;
+
+    const stats = await peopleCountService.getVideoProcessingStats({
+      camera_id: camera_id ? parseInt(camera_id) : undefined,
+      tenant_id: tenant_id ? parseInt(tenant_id) : req.user.tenant_id,
+      branch_id: branch_id ? parseInt(branch_id) : undefined,
+      start_date,
+      end_date
+    });
+
+    console.log('✅ Stats retrieved:', stats);
+
+    res.json({
+      success: true,
+      stats
+    });
+
+  } catch (error) {
+    console.error('❌ Stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve statistics',
+      error: error.message
+    });
+  }
+});
+
+
+/**
+ * ============================================
+ * POST /api/upload-analysis/people-count/test-python
+ * Test if Python environment is properly configured
+ * ============================================
+ */
+console.log('🧪 Registering route: POST /people-count/test-python');
+router.post('/people-count/test-python', authenticate, async (req, res) => {
+  console.log('🧪 Testing Python environment');
+
+  try {
+    const { spawn } = require('child_process');
+    const VENV_PYTHON = path.resolve(
+      __dirname,
+      '../../ai-module/venv/Scripts/python.exe'
+    );
+
+    // Test Python version
+    const pythonTest = spawn(VENV_PYTHON, ['--version']);
+    let pythonVersion = '';
+
+    pythonTest.stdout.on('data', (data) => {
+      pythonVersion += data.toString();
+    });
+
+    pythonTest.stderr.on('data', (data) => {
+      pythonVersion += data.toString();
+    });
+
+    pythonTest.on('close', (code) => {
+      const scriptPath = path.resolve(
+        __dirname,
+        '../../ai-module/src/models/people_count_video.py'
+      );
+
+      res.json({
+        success: code === 0,
+        python_path: VENV_PYTHON,
+        python_exists: fs.existsSync(VENV_PYTHON),
+        python_version: pythonVersion.trim(),
+        script_path: scriptPath,
+        script_exists: fs.existsSync(scriptPath),
+        message: code === 0 
+          ? 'Python environment is ready' 
+          : 'Python environment has issues'
+      });
+    });
+
+  } catch (error) {
+    console.error('❌ Python test error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to test Python environment',
+      error: error.message
+    });
+  }
+});
+
+console.log('✅ People count video routes registered successfully');
+
+// ============================================
+// END OF PEOPLE COUNT VIDEO ROUTES
 // ============================================
 
 /**
@@ -234,67 +516,47 @@ router.post('/detection/process-video', authenticate, upload.single('video'), as
  * Detect people in a single frame with gender classification
  */
 console.log('🔗 Registering route: POST /detection/detect-frame');
+/**
+ * 🆕 LIVE FRAME DETECTION ENDPOINT
+ * POST /api/upload-analysis/detection/detect-frame
+ *
+ * This receives a single frame blob from React
+ * and forwards it to Python detection service
+ */
 router.post('/detection/detect-frame', authenticate, upload.single('frame'), async (req, res) => {
-  console.log('🖼️ Detect in single frame');
-  
   try {
     if (!req.file) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'No frame provided' 
+      return res.status(400).json({
+        success: false,
+        message: 'No frame received'
       });
     }
 
-    const { camera_id } = req.body;
-    console.log(`🔍 Detecting in frame from camera: ${camera_id || 'unknown'}`);
-
-    // Create form data
     const formData = new FormData();
     formData.append('frame', req.file.buffer, {
       filename: 'frame.jpg',
       contentType: 'image/jpeg'
     });
-    
-    if (camera_id) {
-      formData.append('camera_id', camera_id);
-    }
 
-    // Forward to detection service
     const response = await axios.post(
       `${DETECTION_SERVICE_URL}/api/detection/detect-frame`,
       formData,
-      {
-        headers: {
-          ...formData.getHeaders()
-        },
-        timeout: 30000 // 30 seconds timeout
-      }
+      { headers: formData.getHeaders(), timeout: 5000 }
     );
 
-    console.log(`✅ Frame detection: ${response.data.count || 0} people detected`);
+    return res.json({
+      success: true,
+      detections: response.data.detections || [],
+      count: response.data.count || 0
+    });
 
-    res.json(response.data);
+  } catch (err) {
+    console.error('❌ detect-frame error:', err.message);
 
-  } catch (error) {
-    console.error('❌ Frame detection error:', error.message);
-    
-    if (error.response) {
-      return res.status(error.response.status).json({
-        success: false,
-        message: error.response.data.message || 'Detection failed',
-        details: error.response.data
-      });
-    } else if (error.code === 'ECONNREFUSED') {
-      return res.status(503).json({
-        success: false,
-        message: 'Detection service is not available'
-      });
-    } else {
-      return res.status(500).json({
-        success: false,
-        message: error.message || 'Failed to detect in frame'
-      });
-    }
+    return res.status(500).json({
+      success: false,
+      message: 'Frame detection failed'
+    });
   }
 });
 

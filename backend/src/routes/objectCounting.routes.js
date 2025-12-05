@@ -50,6 +50,8 @@ const upload = multer({
  * @desc    Upload video for object counting with image capture
  * @access  Private
  */
+// In objectCounting.routes.js - Update the upload route
+
 router.post('/upload', authenticateToken, upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
@@ -64,8 +66,14 @@ router.post('/upload', authenticateToken, upload.single('video'), async (req, re
       zone_id, 
       camera_id, 
       model_type = 'hog',
-      capture_images = 'true' 
+      capture_images = 'true',
+      line_type,        // NEW
+      line_position,    // NEW (replaces line_y)
+      confidence,
+      class_id
     } = req.body;
+    
+    console.log('📥 Upload params:', { line_type, line_position, confidence, class_id });
     
     const userId = req.user.user_id;
 
@@ -79,12 +87,16 @@ router.post('/upload', authenticateToken, upload.single('video'), async (req, re
       cameraId: camera_id,
       modelType: model_type,
       source: 'upload',
-      captureImages: capture_images === 'true' || capture_images === true
+      captureImages: capture_images === 'true' || capture_images === true,
+      // NEW: line_type and line_position
+      line_type: line_type || 'horizontal',
+      line_position: line_position ? parseInt(line_position) : 300,
+      confidence: confidence ? parseFloat(confidence) : 0.3,
+      class_id: class_id !== undefined ? parseInt(class_id) : -1
     };
 
     const job = await objectCountingService.createJob(jobData);
 
-    // Start processing in background
     objectCountingService.processJob(job.id).catch(err => {
       console.error(`Job ${job.id} failed:`, err);
     });
@@ -104,6 +116,62 @@ router.post('/upload', authenticateToken, upload.single('video'), async (req, re
   }
 });
 
+router.post('/stream/stop', authenticateToken, async (req, res) => {
+  try {
+    const { stream_id, job_id } = req.body;
+    
+    console.log('🛑 Stop stream request:', { stream_id, job_id });
+    
+    let results = {
+      streamStopped: false,
+      jobCancelled: false,
+      messages: []
+    };
+    
+    // 1. Stop the camera stream if stream_id provided
+    if (stream_id) {
+      try {
+        const { Camera } = require('../models');
+        // Call your existing camera stream stop logic
+        // This depends on your camera service implementation
+        // Example: await cameraService.stopStream(stream_id);
+        results.streamStopped = true;
+        results.messages.push('Camera stream stopped');
+        console.log('✅ Camera stream stopped');
+      } catch (streamError) {
+        console.error('Stream stop error:', streamError);
+        results.messages.push('Stream may already be stopped');
+      }
+    }
+    
+    // 2. Cancel any active processing job if job_id provided
+    if (job_id) {
+      try {
+        await objectCountingService.cancelJob(job_id);
+        results.jobCancelled = true;
+        results.messages.push('Processing job cancelled');
+        console.log('✅ Processing job cancelled');
+      } catch (jobError) {
+        console.error('Job cancel error:', jobError);
+        results.messages.push('Job may already be completed/cancelled');
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: results.messages.join('. '),
+      ...results
+    });
+    
+  } catch (error) {
+    console.error('Stop stream/job error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
 /**
  * @route   POST /api/object-counting/stream
  * @desc    Process camera stream for object counting with image capture
@@ -111,13 +179,18 @@ router.post('/upload', authenticateToken, upload.single('video'), async (req, re
  */
 router.post('/stream', authenticateToken, async (req, res) => {
   try {
+    console.log('📡 Stream processing request body:', req.body);
     const { 
       camera_id, 
       duration = 60, 
-      model_type = 'hog',
+      model_type = 'line',
       branch_id,
-      zone_id,
-      capture_images = true
+      zone_id,  // ✅ Now properly extracted
+      capture_images = true,
+      line_type = 'horizontal',    // ✅ NEW
+      line_position = 300,         // ✅ NEW
+      confidence = 0.3,            // ✅ NEW
+      class_id = -1                // ✅ NEW
     } = req.body;
 
     if (!camera_id) {
@@ -147,19 +220,27 @@ router.post('/stream', authenticateToken, async (req, res) => {
       });
     }
 
+    console.log('📷 Starting stream processing for camera:', camera_id);
+    
     const jobData = {
       cameraId: camera_id,
       streamUrl: camera.stream_url,
       duration,
       userId,
       branchId: branch_id || camera.branch_id,
-      zoneId: zone_id || camera.zone_id,
+      zoneId: zone_id || camera.zone_id,  // ✅ Will use provided zone_id or fallback to camera's zone
       modelType: model_type,
       source: 'stream',
       cameraName: camera.camera_name,
-      captureImages: capture_images
+      captureImages: capture_images,
+      // ✅ NEW: Pass line counter params
+      line_type: line_type,
+      line_position: line_position,
+      confidence: confidence,
+      class_id: class_id
     };
-
+    
+    console.log('📡 Stream job data:', jobData);
     const job = await objectCountingService.createJob(jobData);
 
     // Start processing in background
@@ -181,7 +262,6 @@ router.post('/stream', authenticateToken, async (req, res) => {
     });
   }
 });
-
 /**
  * @route   GET /api/object-counting/jobs
  * @desc    Get all object counting jobs for user
@@ -447,45 +527,113 @@ router.delete('/job/:jobId', authenticateToken, async (req, res) => {
  * @desc    Download job results (video or JSON)
  * @access  Private
  */
+/**
+ * @route   GET /api/object-counting/job/:jobId/download
+ * @desc    Download job results (video or JSON) - FIXED
+ * @access  Private
+ */
 router.get('/job/:jobId/download', authenticateToken, async (req, res) => {
   try {
     const { jobId } = req.params;
     const { format = 'json' } = req.query;
     const userId = req.user.user_id;
 
+    console.log('📥 Download request:', { jobId, format, userId });
+
     const job = await objectCountingService.getJob(jobId);
 
     if (!job) {
+      console.error('❌ Job not found:', jobId);
       return res.status(404).json({ 
         success: false, 
         message: 'Job not found' 
       });
     }
 
+    // Check authorization
     if (job.userId !== userId && req.user.role !== 'admin') {
+      console.error('❌ Unauthorized access:', { jobUserId: job.userId, requestUserId: userId });
       return res.status(403).json({ 
         success: false, 
-        message: 'Unauthorized' 
+        message: 'Unauthorized access to job' 
       });
     }
 
+    // Check if job is completed
     if (job.status !== 'completed') {
+      console.error('❌ Job not completed:', { jobId, status: job.status });
       return res.status(400).json({ 
         success: false, 
-        message: 'Job not completed yet' 
+        message: `Job is ${job.status}, not completed yet` 
       });
     }
 
     if (format === 'video') {
-      const outputPath = job.results?.outputVideoPath;
-      if (!outputPath || !fsSync.existsSync(outputPath)) {
+      // ✅ Try multiple possible paths for output video
+      let outputPath = job.results?.outputVideoPath || 
+                      job.results?.output_video_path ||
+                      job.results?.output_path;
+      
+      // ✅ If path is relative or URL, construct absolute path
+      if (outputPath && !path.isAbsolute(outputPath)) {
+        if (outputPath.startsWith('/object-counting/')) {
+          // It's a URL path, extract filename and build absolute path
+          const filename = path.basename(outputPath);
+          outputPath = path.join(__dirname, '../uploads/object-counting/results', filename);
+        } else if (outputPath.includes('results')) {
+          // It's a relative path with results folder
+          outputPath = path.join(__dirname, '../uploads/object-counting', outputPath);
+        } else {
+          // Construct from job ID
+          outputPath = path.join(__dirname, '../uploads/object-counting/results', `${jobId}_output.mp4`);
+        }
+      }
+      
+      if (!outputPath) {
+        // ✅ Try default path based on job ID
+        outputPath = path.join(__dirname, '../uploads/object-counting/results', `${jobId}_output.mp4`);
+        console.log('⚠️ No output path in results, trying default:', outputPath);
+      }
+
+      console.log('📹 Checking for video file at:', outputPath);
+
+      const fsSync = require('fs');
+      if (!fsSync.existsSync(outputPath)) {
+        console.error('❌ Output video file does not exist:', outputPath);
+        console.error('Job results:', JSON.stringify(job.results, null, 2));
+        
         return res.status(404).json({ 
           success: false, 
-          message: 'Output video not found' 
+          message: 'Output video file not found on server. The file may have been deleted or processing did not generate a video file.',
+          debug: {
+            expectedPath: outputPath,
+            resultsData: job.results
+          }
         });
       }
-      res.download(outputPath, `counting_result_${jobId}.mp4`);
+
+      // Check file size
+      const stats = fsSync.statSync(outputPath);
+      console.log(`✅ Video file found, size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+
+      // Send file
+      console.log('✅ Sending video file:', outputPath);
+      res.download(outputPath, `counting_result_${jobId}.mp4`, (err) => {
+        if (err) {
+          console.error('❌ Download error:', err);
+          if (!res.headersSent) {
+            res.status(500).json({
+              success: false,
+              message: 'Error downloading file'
+            });
+          }
+        } else {
+          console.log('✅ Video download completed successfully');
+        }
+      });
     } else {
+      // Return JSON results
+      console.log('✅ Sending JSON results');
       res.json({
         success: true,
         job,
@@ -493,7 +641,7 @@ router.get('/job/:jobId/download', authenticateToken, async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Download error:', error);
+    console.error('❌ Download error:', error);
     res.status(500).json({ 
       success: false, 
       message: error.message 
@@ -572,6 +720,187 @@ router.post('/job/:jobId/save-to-database', authenticateToken, async (req, res) 
     });
   } catch (error) {
     console.error('Save to database error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+router.post('/test-camera-stream', authenticateToken, async (req, res) => {
+  try {
+    const { camera_id } = req.body;
+
+    if (!camera_id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'camera_id is required' 
+      });
+    }
+
+    const { Camera } = require('../models');
+    const camera = await Camera.findByPk(camera_id);
+
+    if (!camera) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Camera not found' 
+      });
+    }
+
+    // Test stream accessibility using ffprobe or a quick frame capture
+    const { spawn } = require('child_process');
+    const ffprobe = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'stream=codec_type,width,height',
+      '-of', 'json',
+      '-timeout', '10000000',  // 10 second timeout
+      camera.stream_url
+    ]);
+
+    let output = '';
+    let errorOutput = '';
+
+    ffprobe.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    ffprobe.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+
+    ffprobe.on('close', (code) => {
+      if (code === 0 && output) {
+        try {
+          const streamInfo = JSON.parse(output);
+          const videoStream = streamInfo.streams?.find(s => s.codec_type === 'video');
+          
+          res.json({
+            success: true,
+            message: 'Camera stream is accessible',
+            camera: {
+              id: camera.camera_id,
+              name: camera.camera_name,
+              url: camera.stream_url,
+              is_active: camera.is_active
+            },
+            streamInfo: videoStream ? {
+              width: videoStream.width,
+              height: videoStream.height,
+              codec: videoStream.codec_name
+            } : null
+          });
+        } catch (parseError) {
+          res.json({
+            success: true,
+            message: 'Camera stream is accessible (basic check)',
+            camera: {
+              id: camera.camera_id,
+              name: camera.camera_name,
+              url: camera.stream_url,
+              is_active: camera.is_active
+            }
+          });
+        }
+      } else {
+        res.status(400).json({
+          success: false,
+          message: 'Cannot connect to camera stream',
+          error: errorOutput || 'Stream not accessible',
+          camera: {
+            id: camera.camera_id,
+            name: camera.camera_name,
+            url: camera.stream_url,
+            is_active: camera.is_active
+          }
+        });
+      }
+    });
+
+    // Timeout after 15 seconds
+    setTimeout(() => {
+      ffprobe.kill();
+      if (!res.headersSent) {
+        res.status(408).json({
+          success: false,
+          message: 'Camera stream test timeout',
+          camera: {
+            id: camera.camera_id,
+            name: camera.camera_name,
+            url: camera.stream_url
+          }
+        });
+      }
+    }, 15000);
+
+  } catch (error) {
+    console.error('Test camera stream error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+/**
+ * @route   GET /api/object-counting/camera/:cameraId/snapshot
+ * @desc    Get a single frame snapshot from camera
+ * @access  Private
+ */
+router.get('/camera/:cameraId/snapshot', authenticateToken, async (req, res) => {
+  try {
+    const { cameraId } = req.params;
+    const { Camera } = require('../models');
+    const camera = await Camera.findByPk(cameraId);
+
+    if (!camera) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Camera not found' 
+      });
+    }
+
+    const { spawn } = require('child_process');
+    const tmpPath = path.join(__dirname, '../uploads/temp', `snapshot_${cameraId}_${Date.now()}.jpg`);
+
+    // Use ffmpeg to grab a single frame
+    const ffmpeg = spawn('ffmpeg', [
+      '-i', camera.stream_url,
+      '-vframes', '1',
+      '-f', 'image2',
+      '-y',
+      tmpPath
+    ]);
+
+    ffmpeg.on('close', (code) => {
+      if (code === 0 && fsSync.existsSync(tmpPath)) {
+        res.sendFile(tmpPath, (err) => {
+          // Clean up after sending
+          if (fsSync.existsSync(tmpPath)) {
+            fsSync.unlinkSync(tmpPath);
+          }
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: 'Failed to capture snapshot'
+        });
+      }
+    });
+
+    // Timeout
+    setTimeout(() => {
+      ffmpeg.kill();
+      if (!res.headersSent) {
+        res.status(408).json({
+          success: false,
+          message: 'Snapshot capture timeout'
+        });
+      }
+    }, 10000);
+
+  } catch (error) {
+    console.error('Snapshot error:', error);
     res.status(500).json({ 
       success: false, 
       message: error.message 

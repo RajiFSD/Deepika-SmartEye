@@ -1,28 +1,18 @@
-# Product Counter Requirements
-# Install with: pip install -r requirements.txt
+# Core Computer Vision & ML
+opencv-python==4.10.0.84
+numpy==1.26.4
+ultralytics==8.3.0  # YOLOv8
 
-# Deep Learning & Computer Vision
-opencv-python>=4.8.0
-opencv-contrib-python>=4.8.0
-ultralytics>=8.0.0
-torch>=2.0.0
-torchvision>=0.15.0
+# Face analysis (for gender detection)
+deepface==0.0.88
 
-# Data Processing
-numpy>=1.24.0
-pandas>=2.0.0
+# HTTP & utilities
+requests==2.32.3
 
-# Utilities
-pillow>=10.0.0
-tqdm>=4.65.0
+# Optional: for better performance/stability
+torch==2.4.1
+torchvision==0.19.1
+Pillow==10.4.0
 
-# Optional: GPU acceleration
-# tensorflow-gpu>=2.13.0  # For GPU support
-
-# Note: YOLO models will be auto-downloaded on first run
-# You can also download manually:
-# - YOLOv8n: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt
-# - YOLOv8s: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt
-# - YOLOv8m: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt
-# - YOLOv8l: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt
-# - YOLOv8x: https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt
+# Optional: logging & monitoring
+loguru==0.7.2

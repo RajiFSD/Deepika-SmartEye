@@ -1,5 +1,7 @@
 import api from './api';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+
 const peopleCountService = {
   // Get all people count logs with pagination and filters
   getPeopleCountLogs: async (params = {}) => {
@@ -145,7 +147,96 @@ const peopleCountService = {
       console.error('âŒ Error exporting CSV:', error);
       throw 'Failed to export CSV';
     }
+  },
+
+   startVideoUpload: async ({ videoFile, tenantId, branchId, userId, direction }) => {
+    try {
+      const formData = new FormData();
+      formData.append('video', videoFile);
+      formData.append('tenant_id', tenantId);
+      formData.append('branch_id', branchId);
+      formData.append('user_id', userId);
+
+      // Must match what backend expects
+      if (direction) {
+        formData.append('Direction', direction);
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/upload-analysis/people-count/video`,
+        {
+          method: 'POST',
+          body: formData
+          // ⚠️ No headers: let browser set multipart Content-Type
+        }
+      );
+
+      const rawText = await response.text();
+      let data;
+
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        // Not JSON – fallback to generic error
+        if (!response.ok) {
+          throw new Error(rawText || 'Video processing failed');
+        }
+        data = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Video processing failed');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('❌ Error uploading people count video:', error);
+      throw error.message || 'Failed to upload people count video';
+    }
+  },
+
+  // Start Python live people counting
+startLivePeopleCounting: async ({
+  stream_url,
+  direction,
+  streamId,
+  camera_id,
+  tenant_id,
+  branch_id
+}) => {
+  try {
+    const payload = {
+      stream_url,
+      direction,
+      streamId,
+      camera_id: camera_id || null,
+      tenant_id,
+      branch_id
+    };
+
+    console.log("📦 Sending live people-count start payload:", payload);
+
+    const res = await fetch(
+      `${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/people-count/live/start`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    const data = await res.json();
+    console.log("📊 Live people-count start response:", data);
+
+    return { ok: res.ok, ...data };
+  } catch (err) {
+    console.error("❌ Error starting live people counting:", err);
+    return { ok: false, success: false, message: err.message };
   }
+}
+
+
+
 };
 
 export default peopleCountService;

@@ -1,6 +1,6 @@
 /**
  * Enhanced Camera API Routes with Streaming Support
- * Fixed: Database query syntax and connection handling
+ * FIXED: Proper stream tracking and stop functionality
  */
 
 const express = require('express');
@@ -47,7 +47,6 @@ router.post('/stream', async (req, res) => {
     if (camera_id) {
       console.log(`🔍 Looking up camera with ID: ${camera_id}`);
       
-      // FIX: Use proper where clause with object
       cameraData = await Camera.findOne({
         where: { camera_id: camera_id }
       });
@@ -62,7 +61,6 @@ router.post('/stream', async (req, res) => {
       
       console.log(`✅ Camera found: ${cameraData.camera_name}`);
       console.log(`📹 Camera stream_url: ${cameraData.stream_url}`);
-      console.log(`🔌 Camera is_active: ${cameraData.is_active}`);
       
       if (!cameraData.is_active) {
         console.error(`❌ Camera is not active: ${camera_id}`);
@@ -72,23 +70,18 @@ router.post('/stream', async (req, res) => {
         });
       }
 
-      // Use stream_url from database if available, otherwise build it
       streamUrl = cameraData.stream_url || buildStreamUrl(cameraData);
-      
-      console.log(`🎥 Final stream URL: ${streamUrl}`);
       
       if (!streamUrl) {
         console.error(`❌ No valid stream URL for camera: ${camera_id}`);
         return res.status(400).json({
           success: false,
-          message: 'Camera has no valid stream URL. Please set stream_url or ip_address in camera settings.'
+          message: 'Camera has no valid stream URL'
         });
       }
 
       streamId = `camera_${camera_id}`;
-      console.log(`🆔 Stream ID: ${streamId}`);
     } else {
-      // Start stream with manual config
       console.log('🔧 Using manual configuration');
       if (!manualConfig.ip_address) {
         return res.status(400).json({
@@ -108,6 +101,7 @@ router.post('/stream', async (req, res) => {
         message: 'Stream already active',
         streamUrl: `/camera/video/${streamId}`,
         streamId: streamId,
+        cameraStreamUrl: streamUrl,
         snapshotUrl: `/camera/snapshot/${streamId}`
       });
     }
@@ -122,7 +116,7 @@ router.post('/stream', async (req, res) => {
 
     // Start the stream
     const processingFps = cameraData?.processing_fps || manualConfig.processing_fps || 1;
-    const resolution = cameraData?.resolution || manualConfig.resolution || '1280x720';
+    const resolution = cameraData?.resolution || manualConfig.resolution || '1920x1080';
 
     console.log(`⚙️ Stream settings: fps=${processingFps}, resolution=${resolution}`);
 
@@ -135,17 +129,9 @@ router.post('/stream', async (req, res) => {
         global.cameraFrames.set(camId, frameData);
         
         // Log first frame
-        if (!global.firstFrameLogged) {
+        if (!global[`firstFrame_${camId}`]) {
           console.log(`🎞️ First frame received for ${camId}, size: ${frameData.length} bytes`);
-          global.firstFrameLogged = true;
-        }
-        
-        // Update last connected time periodically
-        if (cameraData && Math.random() < 0.01) { // 1% of frames
-          cameraData.update({ 
-            connection_status: 'connected',
-            last_connected_at: new Date()
-          }).catch(console.error);
+          global[`firstFrame_${camId}`] = true;
         }
       },
       onError: async (error) => {
@@ -162,7 +148,6 @@ router.post('/stream', async (req, res) => {
     console.log(`📊 Start stream result:`, result);
 
     if (result.success) {
-      // Update camera status to connected
       if (cameraData) {
         await cameraData.update({ 
           connection_status: 'connected',
@@ -173,7 +158,7 @@ router.post('/stream', async (req, res) => {
 
       res.json({
         success: true,
-        message: 'Stream started successfully',
+        message: result.streamType === 'http' ? 'HTTP/MJPEG stream started' : 'Stream started successfully',
         streamUrl: `/camera/video/${streamId}`,
         streamId: streamId,
         snapshotUrl: `/camera/snapshot/${streamId}`,
@@ -182,9 +167,7 @@ router.post('/stream', async (req, res) => {
         camera: cameraData ? {
           camera_id: cameraData.camera_id,
           camera_name: cameraData.camera_name,
-          camera_code: cameraData.camera_code,
-          resolution: cameraData.resolution,
-          fps: cameraData.processing_fps
+          camera_code: cameraData.camera_code
         } : null
       });
     } else {
@@ -203,7 +186,6 @@ router.post('/stream', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Start stream error:', error);
-    console.error('Stack trace:', error.stack);
     res.status(500).json({
       success: false,
       message: error.message || 'Error starting stream'
@@ -213,110 +195,139 @@ router.post('/stream', async (req, res) => {
 
 /**
  * GET /api/camera/video/:streamId
- * Get video stream feed (MJPEG)
+ * MJPEG stream endpoint
  */
-// router.get('/video/:streamId', (req, res) => {
-//   const { streamId } = req.params;
+router.get('/video/:streamId', (req, res) => {
+  const { streamId } = req.params;
+  console.log(`📹 Client requesting video stream: ${streamId}`);
 
-//   console.log(`📹 Client requesting video stream: ${streamId}`);
+  if (!cameraConnectionService.isStreaming(streamId)) {
+    console.error(`❌ Stream not active: ${streamId}`);
+    return res.status(404).json({
+      success: false,
+      message: 'Stream not active. Start the stream first.'
+    });
+  }
 
-//   if (!cameraConnectionService.isStreaming(streamId)) {
-//     console.error(`❌ Stream not found or not active: ${streamId}`);
-//     return res.status(404).json({
-//       success: false,
-//       message: 'Stream not found or not active. Please start the stream first.'
-//     });
-//   }
+  console.log(`✅ Stream is active, starting MJPEG response for: ${streamId}`);
 
-//   const streamInfo = cameraConnectionService.getStreamInfo(streamId);
-//   console.log(`✅ Stream info:`, streamInfo);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
-//   // Set headers for MJPEG stream
-//   res.writeHead(200, {
-//     'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
-//     'Cache-Control': 'no-cache, no-store, must-revalidate',
-//     'Connection': 'keep-alive',
-//     'Pragma': 'no-cache',
-//     'Expires': '0',
-//     'Access-Control-Allow-Origin': '*'
-//   });
+  res.writeHead(200, {
+    'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+    'Connection': 'keep-alive'
+  });
 
-//   // Initialize frame storage
-//   global.cameraFrames = global.cameraFrames || new Map();
+  let frameCount = 0;
 
-//   let frameCount = 0;
-
-//   // Send frames to client
-//   const intervalId = setInterval(() => {
-//     const frameData = global.cameraFrames.get(streamId);
+  const intervalId = setInterval(() => {
+    let frame = cameraConnectionService.getLatestFrame(streamId);
     
-//     if (frameData && frameData.length > 0) {
-//       try {
-//         res.write('--frame\r\n');
-//         res.write('Content-Type: image/jpeg\r\n');
-//         res.write(`Content-Length: ${frameData.length}\r\n\r\n`);
-//         res.write(frameData);
-//         res.write('\r\n');
-        
-//         frameCount++;
-//         if (frameCount % 30 === 0) {
-//           console.log(`📊 Sent ${frameCount} frames to client for ${streamId}`);
-//         }
-//       } catch (error) {
-//         console.error('❌ Error writing frame:', error);
-//         clearInterval(intervalId);
-//         res.end();
-//       }
-//     } else {
-//       // No frame available yet
-//       if (frameCount === 0) {
-//         console.log(`⏳ Waiting for first frame for ${streamId}...`);
-//       }
-//     }
-//   }, 100); // 10 FPS for viewing
+    if (!frame) {
+      frame = global.cameraFrames?.get(streamId);
+    }
 
-//   // Clean up on disconnect
-//   req.on('close', () => {
-//     clearInterval(intervalId);
-//     console.log(`🔌 Client disconnected from stream: ${streamId} (sent ${frameCount} frames)`);
-//   });
+    if (!frame || frame.length === 0) {
+      return;
+    }
 
-//   req.on('error', (error) => {
-//     clearInterval(intervalId);
-//     console.error(`❌ Client connection error for ${streamId}:`, error);
-//   });
-// });
+    try {
+      res.write('--frame\r\n');
+      res.write('Content-Type: image/jpeg\r\n');
+      res.write(`Content-Length: ${frame.length}\r\n\r\n`);
+      res.write(frame);
+      res.write('\r\n');
+      
+      frameCount++;
+      if (frameCount === 1) {
+        console.log(`✅ First frame sent to client for ${streamId}`);
+      }
+    } catch (err) {
+      console.error('❌ Error writing frame:', err.message);
+      clearInterval(intervalId);
+      try { res.end(); } catch (_) {}
+    }
+  }, 100);
+
+  req.on('close', () => {
+    clearInterval(intervalId);
+    console.log(`🔌 Client disconnected from stream: ${streamId}`);
+  });
+
+  req.on('error', (error) => {
+    clearInterval(intervalId);
+    console.error(`❌ Client connection error for ${streamId}:`, error.message);
+  });
+});
 
 /**
  * POST /api/camera/stop/:streamId
- * Stop camera stream
+ * FIXED: Proper stream stopping
  */
 router.post('/stop/:streamId', async (req, res) => {
   try {
     const { streamId } = req.params;
-
-    const result = cameraConnectionService.stopStream(streamId);
+    console.log(`🛑 POST /api/camera/stop/${streamId} called`);
     
-    // Clean up frame data
-    if (global.cameraFrames) {
-      global.cameraFrames.delete(streamId);
+    // Check if stream exists
+    const isActive = cameraConnectionService.isStreaming(streamId);
+    console.log(`🛑 Stream ${streamId} is ${isActive ? 'active' : 'not active'}`);
+    
+    if (!isActive) {
+      // Stream not active, but that's okay - return success
+      console.log(`⚠️ Stream ${streamId} not found, but returning success`);
+      
+      // Clean up global frames anyway
+      if (global.cameraFrames) {
+        global.cameraFrames.delete(streamId);
+      }
+      
+      // Update camera status if it's a camera stream
+      if (streamId.startsWith('camera_')) {
+        const cameraId = streamId.replace('camera_', '');
+        const camera = await Camera.findByPk(cameraId);
+        if (camera) {
+          await camera.update({ connection_status: 'disconnected' });
+          console.log(`✅ Updated camera ${cameraId} status to disconnected`);
+        }
+      }
+      
+      return res.json({
+        success: true,
+        message: 'Stream already stopped or not found'
+      });
     }
     
-    // Update camera status if it's a DB camera
+    // Stream is active, stop it
+    const result = cameraConnectionService.stopStream(streamId);
+    console.log(`🛑 Stop stream result:`, result);
+    
+    // Clean up global frames
+    if (global.cameraFrames) {
+      global.cameraFrames.delete(streamId);
+      delete global[`firstFrame_${streamId}`];
+    }
+    
+    // Update camera status
     if (streamId.startsWith('camera_')) {
       const cameraId = streamId.replace('camera_', '');
-      const camera = await Camera.findOne({
-        where: { camera_id: cameraId }  // Fixed: proper object syntax
-      });
+      const camera = await Camera.findByPk(cameraId);
       if (camera) {
         await camera.update({ connection_status: 'disconnected' });
+        console.log(`✅ Updated camera ${cameraId} status to disconnected`);
       }
     }
     
-    res.json(result);
+    res.json({
+      success: true,
+      message: 'Stream stopped successfully',
+      streamId
+    });
 
   } catch (error) {
-    console.error('Stop stream error:', error);
+    console.error('❌ Stop stream error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Error stopping stream'
@@ -326,7 +337,6 @@ router.post('/stop/:streamId', async (req, res) => {
 
 /**
  * GET /api/camera/snapshot/:streamId
- * Get a single frame snapshot
  */
 router.get('/snapshot/:streamId', async (req, res) => {
   try {
@@ -373,13 +383,12 @@ router.get('/active', async (req, res) => {
   try {
     const activeStreams = cameraConnectionService.getActiveStreams();
     
-    // Get camera details for active streams
     const streamDetails = await Promise.all(
       activeStreams.map(async (streamId) => {
         if (streamId.startsWith('camera_')) {
           const cameraId = streamId.replace('camera_', '');
           const camera = await Camera.findOne({
-            where: { camera_id: cameraId },  // Fixed: proper object syntax
+            where: { camera_id: cameraId },
             attributes: ['camera_id', 'camera_name', 'camera_code', 'ip_address']
           });
           return {
@@ -403,92 +412,6 @@ router.get('/active', async (req, res) => {
       message: 'Error getting active streams'
     });
   }
-});
-
-
-router.get('/video/:streamId', (req, res) => {
-  const { streamId } = req.params;
-  console.log(`📹 Client requesting video stream: ${streamId}`);
-
-  if (!cameraConnectionService.isStreaming(streamId)) {
-    return res.status(404).json({
-      success: false,
-      message: 'Stream not active. Start the stream first.'
-    });
-  }
-
-  // ⭐ CORS + CORP fixes (prevents canvas taint)
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-
-  res.writeHead(200, {
-    'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
-    'Connection': 'keep-alive'
-  });
-
-  const intervalId = setInterval(() => {
-    const frame = cameraConnectionService.getLatestFrame(streamId);
-    if (!frame) return;
-
-    try {
-      res.write('--frame\r\n');
-      res.write('Content-Type: image/jpeg\r\n');
-      res.write(`Content-Length: ${frame.length}\r\n\r\n`);
-      res.write(frame);
-      res.write('\r\n');
-    } catch (err) {
-      console.log('Error writing frame:', err);
-      clearInterval(intervalId);
-      try { res.end(); } catch (_) {}
-    }
-  }, 100);
-
-  req.on('close', () => {
-    clearInterval(intervalId);
-    console.log(`🔌 Client disconnected from stream: ${streamId}`);
-  });
-});
-
-
-
-
-/**
- * GET /api/test-ffmpeg
- * Test FFmpeg availability
- */
-router.get('/test-ffmpeg', (req, res) => {
-  const { spawn } = require('child_process');
-  const ffmpeg = spawn('ffmpeg', ['-version']);
-  
-  let output = '';
-  ffmpeg.stdout.on('data', (data) => {
-    output += data.toString();
-  });
-  
-  ffmpeg.on('close', (code) => {
-    if (code === 0) {
-      res.json({ 
-        success: true, 
-        message: 'FFmpeg is available',
-        version: output.split('\n')[0]
-      });
-    } else {
-      res.json({ 
-        success: false, 
-        message: 'FFmpeg check failed'
-      });
-    }
-  });
-  
-  ffmpeg.on('error', (error) => {
-    res.status(500).json({ 
-      success: false, 
-      message: 'FFmpeg not found: ' + error.message 
-    });
-  });
 });
 
 module.exports = router;
